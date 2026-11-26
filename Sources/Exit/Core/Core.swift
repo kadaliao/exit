@@ -1,0 +1,123 @@
+import AppKit
+import os
+
+/// Picks the Chinese string when the user's preferred language is Chinese.
+enum Lang {
+    static let isChinese: Bool = Locale.preferredLanguages.first?.hasPrefix("zh") ?? false
+}
+
+@inline(__always) func T(_ en: String, _ zh: String) -> String { Lang.isChinese ? zh : en }
+
+let log = Logger(subsystem: "io.github.kadaliao.Exit", category: "app")
+
+/// What happened to a window.
+enum WindowEvent: Int, CaseIterable, Codable, Identifiable {
+    case close = 0
+    case open = 1
+    case minimize = 2
+    case quit = 3
+
+    var id: Int { rawValue }
+
+    var key: String {
+        switch self {
+        case .close: "close"
+        case .open: "open"
+        case .minimize: "minimize"
+        case .quit: "quit"
+        }
+    }
+
+    init?(key: String) {
+        guard let e = WindowEvent.allCases.first(where: { $0.key == key.lowercased() }) else { return nil }
+        self = e
+    }
+
+    var title: String {
+        switch self {
+        case .close: T("Close window", "关闭窗口")
+        case .open: T("Open window", "打开窗口")
+        case .minimize: T("Minimize", "最小化")
+        case .quit: T("Quit app", "退出 App")
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .close: "xmark.circle"
+        case .open: "plus.circle"
+        case .minimize: "minus.circle"
+        case .quit: "power.circle"
+        }
+    }
+}
+
+enum Paths {
+    static let support: URL = {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let url = base.appendingPathComponent("Exit", isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }()
+
+    static let userEffects: URL = {
+        let url = support.appendingPathComponent("Effects", isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }()
+
+    /// Built-in effects: inside the app bundle, or the repo's Effects/ folder when run from source.
+    static let builtInEffects: URL = {
+        if let res = Bundle.main.resourceURL?.appendingPathComponent("Effects", isDirectory: true),
+           FileManager.default.fileExists(atPath: res.appendingPathComponent("prelude.metal").path) {
+            return res
+        }
+        // Sources/Exit/Core/Core.swift -> repo root
+        let repo = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        return repo.appendingPathComponent("Effects", isDirectory: true)
+    }()
+
+    /// The effect-authoring guide, also used as the AI system prompt.
+    static let authoringGuide: URL = {
+        if let res = Bundle.main.resourceURL?.appendingPathComponent("EFFECTS.md"),
+           FileManager.default.fileExists(atPath: res.path) {
+            return res
+        }
+        return builtInEffects.deletingLastPathComponent().appendingPathComponent("docs/EFFECTS.md")
+    }()
+}
+
+extension CGRect {
+    var center: CGPoint { CGPoint(x: midX, y: midY) }
+}
+
+/// Global screen geometry helpers. AX and CGWindow use a top-left origin anchored at the
+/// primary screen; AppKit uses a bottom-left origin.
+enum ScreenGeometry {
+    static var primaryHeight: CGFloat {
+        NSScreen.screens.first?.frame.height ?? NSScreen.main?.frame.height ?? 0
+    }
+
+    /// Converts a top-left-origin global rect (AX / CGWindow) into AppKit coordinates.
+    static func toAppKit(_ r: CGRect) -> CGRect {
+        CGRect(x: r.minX, y: primaryHeight - r.maxY, width: r.width, height: r.height)
+    }
+
+    static func toAppKit(_ p: CGPoint) -> CGPoint {
+        CGPoint(x: p.x, y: primaryHeight - p.y)
+    }
+
+    /// The screen that contains most of the given AppKit rect.
+    static func screen(for appKitRect: CGRect) -> NSScreen? {
+        var best: NSScreen?
+        var bestArea: CGFloat = 0
+        for s in NSScreen.screens {
+            let i = s.frame.intersection(appKitRect)
+            let area = i.isNull ? 0 : i.width * i.height
+            if area > bestArea { bestArea = area; best = s }
+        }
+        return best ?? NSScreen.screens.first(where: { $0.frame.contains(appKitRect.center) }) ?? NSScreen.main
+    }
+}
