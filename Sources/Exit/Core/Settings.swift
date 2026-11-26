@@ -10,24 +10,27 @@ enum Assignment: Codable, Hashable {
     var effectID: String? { if case .effect(let id) = self { return id } else { return nil } }
 }
 
-enum AIProvider: String, Codable, CaseIterable, Identifiable {
-    case claudeCode
-    case api
-    var id: String { rawValue }
-    var title: String {
-        switch self {
-        case .claudeCode: T("Claude Code (local CLI)", "Claude Code（本机 CLI）")
-        case .api: T("Anthropic API key", "Anthropic API Key")
-        }
-    }
-}
-
 /// All user preferences, persisted to UserDefaults.
 final class Settings: ObservableObject {
     static let shared = Settings()
     private let d = UserDefaults.standard
 
     @Published var enabled: Bool { didSet { d.set(enabled, forKey: "enabled") } }
+    @Published var language: AppLanguage {
+        didSet {
+            d.set(language.rawValue, forKey: "language")
+            Lang.apply(language)
+            // System-provided text (text-field menus, open panels) follows from the next launch.
+            if language == .system { d.removeObject(forKey: "AppleLanguages") } else { d.set([language.rawValue], forKey: "AppleLanguages") }
+            EffectLibrary.shared.sortByName()
+        }
+    }
+    @Published var appearance: AppAppearance {
+        didSet {
+            d.set(appearance.rawValue, forKey: "appearance")
+            NSApp?.appearance = appearance.nsAppearance
+        }
+    }
     @Published var assignments: [WindowEvent: Assignment] { didSet { save(assignments, "assignments") } }
     /// Effects excluded from random shuffle.
     @Published var shuffleExcluded: Set<String> { didSet { save(shuffleExcluded, "shuffleExcluded") } }
@@ -39,9 +42,13 @@ final class Settings: ObservableObject {
     @Published var refreshFocused: Bool { didSet { d.set(refreshFocused, forKey: "refreshFocused") } }
     @Published var minWindowSize: Double { didSet { d.set(minWindowSize, forKey: "minWindowSize") } }
     @Published var respectReduceMotion: Bool { didSet { d.set(respectReduceMotion, forKey: "respectReduceMotion") } }
-    @Published var aiProvider: AIProvider { didSet { d.set(aiProvider.rawValue, forKey: "aiProvider") } }
-    @Published var aiModel: String { didSet { d.set(aiModel, forKey: "aiModel") } }
-    /// low / medium / high — how hard Claude thinks before writing the shader.
+    /// Where AI generation runs, e.g. "cli.codex" or "api.openai" (see `AIProvider`).
+    @Published var aiProviderID: String { didSet { d.set(aiProviderID, forKey: "aiProvider") } }
+    /// Model per provider ID; a missing entry means the provider's default.
+    @Published var aiModels: [String: String] { didSet { d.set(aiModels, forKey: "aiModels") } }
+    /// Base URL per API provider ID; a missing entry means the preset's URL.
+    @Published var aiBaseURLs: [String: String] { didSet { d.set(aiBaseURLs, forKey: "aiBaseURLs") } }
+    /// low / medium / high — how hard the model thinks before writing the shader.
     @Published var aiEffort: String { didSet { d.set(aiEffort, forKey: "aiEffort") } }
     var playCount: Int { didSet { d.set(playCount, forKey: "playCount") } }
 
@@ -53,18 +60,30 @@ final class Settings: ObservableObject {
             "refreshFocused": false,
             "minWindowSize": 140.0,
             "respectReduceMotion": true,
-            "aiProvider": AIProvider.claudeCode.rawValue,
-            "aiModel": "claude-opus-5-5",
             "aiEffort": "medium",
         ])
         enabled = d.bool(forKey: "enabled")
+        language = AppLanguage(rawValue: d.string(forKey: "language") ?? "") ?? .system
+        appearance = AppAppearance(rawValue: d.string(forKey: "appearance") ?? "") ?? .system
         speed = d.double(forKey: "speed")
         preciseCapture = d.bool(forKey: "preciseCapture")
         refreshFocused = d.bool(forKey: "refreshFocused")
         minWindowSize = d.double(forKey: "minWindowSize")
         respectReduceMotion = d.bool(forKey: "respectReduceMotion")
-        aiProvider = AIProvider(rawValue: d.string(forKey: "aiProvider") ?? "") ?? .claudeCode
-        aiModel = d.string(forKey: "aiModel") ?? "claude-opus-5-5"
+        // 0.1.0 stored "claudeCode" / "api" and one model for both.
+        var providerID = d.string(forKey: "aiProvider") ?? ""
+        if providerID == "claudeCode" { providerID = "cli.claude" }
+        if providerID == "api" { providerID = "api.anthropic" }
+        hasChosenAIProvider = AIProvider(id: providerID) != nil
+        aiProviderID = AIProvider(id: providerID) != nil ? providerID : "cli.claude"
+        var models = d.dictionary(forKey: "aiModels") as? [String: String] ?? [:]
+        if let old = d.string(forKey: "aiModel") {
+            if models["cli.claude"] == nil { models["cli.claude"] = old }
+            if models["api.anthropic"] == nil { models["api.anthropic"] = old }
+            d.removeObject(forKey: "aiModel")
+        }
+        aiModels = models
+        aiBaseURLs = d.dictionary(forKey: "aiBaseURLs") as? [String: String] ?? [:]
         aiEffort = d.string(forKey: "aiEffort") ?? "medium"
         excludedApps = d.stringArray(forKey: "excludedApps") ?? []
         playCount = d.integer(forKey: "playCount")
@@ -78,6 +97,22 @@ final class Settings: ObservableObject {
     }
 
     func assignment(for event: WindowEvent) -> Assignment { assignments[event] ?? .off }
+
+    /// false until the user picks an AI service, so the first installed CLI can be chosen for them.
+    private(set) var hasChosenAIProvider: Bool
+
+    var aiProvider: AIProvider {
+        get { AIProvider(id: aiProviderID) ?? .cli(.claude) }
+        set { aiProviderID = newValue.id; hasChosenAIProvider = true }
+    }
+
+    func aiModel(for p: AIProvider) -> String { aiModels[p.id] ?? p.defaultModel }
+
+    func aiBaseURL(for p: AIProvider) -> String {
+        guard case .api(let preset) = p else { return "" }
+        let saved = (aiBaseURLs[p.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return saved.isEmpty ? preset.baseURL : saved
+    }
 
     private func save<V: Encodable>(_ value: V, _ key: String) {
         if let data = try? JSONEncoder().encode(value) { d.set(data, forKey: key) }

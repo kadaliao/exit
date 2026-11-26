@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let navigation = SettingsNavigation()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.appearance = Settings.shared.appearance.nsAppearance
         EffectLibrary.shared.loadAll()
         EffectLibrary.shared.startWatching()
 
@@ -102,6 +103,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             it.representedObject = e.id
             it.target = self
             it.isEnabled = e.isReady
+            it.toolTip = e.meta.displayDescription
             pm.addItem(it)
         }
         preview.submenu = pm
@@ -136,8 +138,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func assignmentMenu(for event: WindowEvent) -> NSMenu {
         let m = NSMenu()
         let current = Settings.shared.assignment(for: event)
-        func add(_ title: String, _ a: Assignment) {
+        func add(_ title: String, _ a: Assignment, tip: String? = nil) {
             let it = NSMenuItem(title: title, action: #selector(assign(_:)), keyEquivalent: "")
+            it.toolTip = tip
             it.representedObject = AssignmentBox(event: event, assignment: a)
             it.state = current == a ? .on : .off
             it.target = self
@@ -147,7 +150,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         add(T("Shuffle", "随机"), .random)
         m.addItem(.separator())
         for e in EffectLibrary.shared.effects where e.meta.events.contains(event) && e.isReady {
-            add(e.meta.displayName, .effect(e.id))
+            add(e.meta.displayName, .effect(e.id), tip: e.meta.displayDescription)
         }
         return m
     }

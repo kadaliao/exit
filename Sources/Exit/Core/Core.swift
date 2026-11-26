@@ -1,9 +1,71 @@
 import AppKit
 import os
 
-/// Picks the Chinese string when the user's preferred language is Chinese.
+/// Interface language: follow macOS, or a fixed one picked in Settings → General.
+enum AppLanguage: String, CaseIterable, Identifiable {
+    case system, english = "en", chinese = "zh-Hans"
+    var id: String { rawValue }
+
+    /// Each language is named in itself, so it can be found whatever the current language is.
+    var title: String {
+        switch self {
+        case .system: T("System (\(Lang.systemPrefersChinese ? "简体中文" : "English"))",
+                        "跟随系统（\(Lang.systemPrefersChinese ? "简体中文" : "English")）")
+        case .english: "English"
+        case .chinese: "简体中文"
+        }
+    }
+}
+
+/// Picks the Chinese string when the chosen (or system) language is Chinese.
 enum Lang {
-    static let isChinese: Bool = Locale.preferredLanguages.first?.hasPrefix("zh") ?? false
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var chinese = resolve(UserDefaults.standard.string(forKey: "language"))
+
+    static var isChinese: Bool { lock.withLock { chinese } }
+
+    static func apply(_ language: AppLanguage) {
+        lock.withLock { chinese = resolve(language.rawValue) }
+    }
+
+    private static func resolve(_ language: String?) -> Bool {
+        switch AppLanguage(rawValue: language ?? "") ?? .system {
+        case .english: false
+        case .chinese: true
+        case .system: systemPrefersChinese
+        }
+    }
+
+    /// The Mac's own language list, ignoring the override Exit keeps for its system strings.
+    static var systemPrefersChinese: Bool {
+        let global = UserDefaults.standard.persistentDomain(forName: UserDefaults.globalDomain)?["AppleLanguages"] as? [String]
+        return (global ?? Locale.preferredLanguages).first?.hasPrefix("zh") ?? false
+    }
+}
+
+/// Light or dark for Exit's own windows.
+enum AppAppearance: String, CaseIterable, Identifiable {
+    case system, light, dark
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .system: T("System", "跟随系统")
+        case .light: T("Light", "浅色")
+        case .dark: T("Dark", "深色")
+        }
+    }
+
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .system: nil
+        case .light: NSAppearance(named: .aqua)
+        case .dark: NSAppearance(named: .darkAqua)
+        }
+    }
+
+    /// Whether macOS itself is dark — for pictures of other apps' windows, which ignore Exit's choice.
+    static var systemIsDark: Bool { UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark" }
 }
 
 @inline(__always) func T(_ en: String, _ zh: String) -> String { Lang.isChinese ? zh : en }

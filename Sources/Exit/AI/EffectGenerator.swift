@@ -1,11 +1,14 @@
 import AppKit
 import Metal
 
-/// Turns a sentence into a working effect: asks Claude for a shader, compiles it, renders
-/// test frames to check the rules (seamless start, clean finish, speed), and feeds any
-/// problems back to Claude until it passes.
+/// Turns a sentence into a working effect: asks the chosen model for a shader, compiles it,
+/// renders test frames to check the rules (seamless start, clean finish, speed), and feeds
+/// any problems back to the model until it passes.
 @MainActor
 final class EffectGenerator: ObservableObject {
+    /// Shared by the settings window, so a run (and the text being typed) outlives tab switches.
+    static let shared = EffectGenerator()
+
     enum Status: Equatable { case idle, working, done, failed }
 
     struct Step: Identifiable {
@@ -19,6 +22,11 @@ final class EffectGenerator: ObservableObject {
     @Published private(set) var source = ""
     @Published private(set) var savedEffectID: String?
     @Published private(set) var errorText: String?
+    /// The description box and the closing/opening switch in the AI pane.
+    @Published var prompt = ""
+    @Published var forOpen = false
+    /// Whether the last run was for opening, for the "Use for…" button on its result.
+    @Published private(set) var resultForOpen = false
 
     private var task: Task<Void, Never>?
     private let maxRepairs = 3
@@ -42,26 +50,22 @@ final class EffectGenerator: ObservableObject {
         source = ""
         savedEffectID = nil
         errorText = nil
+        resultForOpen = events == [.open]
         task = Task { await run(desc, events: events.isEmpty ? [.close, .quit] : events) }
     }
 
     private func step(_ text: String) { steps.append(Step(text: text)) }
     private func finishStep(_ ok: Bool) { if !steps.isEmpty { steps[steps.count - 1].ok = ok } }
 
-    private func backend() throws -> ClaudeBackend {
-        switch Settings.shared.aiProvider {
-        case .api:
-            guard let key = Keychain.read(), !key.isEmpty else { throw ClaudeError.noAPIKey }
-            return AnthropicAPIBackend(apiKey: key)
-        case .claudeCode:
-            guard let exe = ClaudeCodeBackend.locate() else { throw ClaudeError.cliNotFound }
-            return ClaudeCodeBackend(executable: exe)
-        }
-    }
-
     private func run(_ description: String, events: Set<WindowEvent>) async {
         do {
-            let backend = try backend()
+            let provider = Settings.shared.aiProvider
+            let model = try AIService.model(for: provider)
+            let effort = provider.supportsEffort ? Settings.shared.aiEffort : ""
+            let who = provider.title
+            // Finding a CLI may ask the login shell; keep that off the main thread.
+            if case .cli(let agent) = provider { _ = await Task.detached { CLILocator.locate(agent) }.value }
+            let backend = try AIService.backend(for: provider)
             let system = Self.systemPrompt()
             let eventList = events.map(\.key).sorted().joined(separator: ", ")
             var messages = [ChatMessage(role: .user, text: """
@@ -74,10 +78,9 @@ final class EffectGenerator: ObservableObject {
 
             for attempt in 0...maxRepairs {
                 try Task.checkCancellation()
-                step(attempt == 0 ? T("Claude is writing the shader…", "Claude 正在编写着色器…")
-                                   : T("Claude is fixing it (round \(attempt))…", "Claude 正在修改（第 \(attempt) 轮）…"))
-                let reply = try await backend.send(system: system, messages: messages, model: Settings.shared.aiModel,
-                                                   effort: Settings.shared.aiEffort)
+                step(attempt == 0 ? T("\(who) is writing the shader…", "\(who) 正在编写着色器…")
+                                   : T("\(who) is fixing it (round \(attempt))…", "\(who) 正在修改（第 \(attempt) 轮）…"))
+                let reply = try await backend.send(system: system, messages: messages, model: model, effort: effort)
                 try Task.checkCancellation()
                 finishStep(true)
                 guard let code = Self.extractCode(reply) else {
@@ -113,7 +116,7 @@ final class EffectGenerator: ObservableObject {
                               "已保存，但上面列出的问题还没完全解决。可以手动修改文件，或换个描述再试。")
                 status = .done
             } else {
-                throw ClaudeError.process(T("Couldn't get a version that compiles. Try describing it differently.",
+                throw AIError.process(T("Couldn't get a version that compiles. Try describing it differently.",
                                             "没能得到可编译的版本，换个描述再试试。"))
             }
         } catch is CancellationError {
@@ -131,7 +134,7 @@ final class EffectGenerator: ObservableObject {
         let meta = EffectMeta.parse(source: code, fallbackName: "ai-effect")
         let id = lib.uniqueUserID(base: meta.name)
         guard lib.saveUserEffect(id: id, source: code) != nil else {
-            throw ClaudeError.process(T("Couldn't write the effect file.", "无法写入特效文件。"))
+            throw AIError.process(T("Couldn't write the effect file.", "无法写入特效文件。"))
         }
         savedEffectID = id
         step(T("Saved as \(id).metal", "已保存为 \(id).metal"))

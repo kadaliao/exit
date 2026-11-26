@@ -9,7 +9,7 @@ import SwiftUI
 enum DevTools {
     static func run(_ args: [String]) -> Int32? {
         guard let cmd = args.first(where: { $0.hasPrefix("--") }),
-              ["--check", "--render-sheet", "--bench", "--render-frames", "--validate", "--generate", "--snapshot-ui"].contains(cmd) else { return nil }
+              ["--check", "--render-sheet", "--bench", "--render-frames", "--render-sequence", "--validate", "--generate", "--snapshot-ui", "--ai-ping"].contains(cmd) else { return nil }
         let lib = EffectLibrary.shared
         lib.loadAll(synchronously: true)
 
@@ -59,6 +59,77 @@ enum DevTools {
                 try? Images.writePNG(img, to: URL(fileURLWithPath: dir).appendingPathComponent(String(format: "%@-%02d.png", e.id, i)))
             }
             print("wrote \(imgs.count) frames to \(dir)")
+            return 0
+
+        case "--render-sequence":
+            // Renders one effect onto your own window picture as a transparent PNG sequence, for videos:
+            //   --render-sequence dir --only id --window win.png --stage 1920x1080 --rect x,y,w,h
+            //   [--scale 1] [--fps 60] [--corner 20] [--cursor x,y] [--event open] [--shadow] [--seed 0.37]
+            // Coordinates are stage pixels from the top left. Each frame covers only the effect's canvas;
+            // meta.json says where that canvas sits on the stage.
+            //   (--file some.metal renders a file that isn't in the effects folders)
+            var meta: EffectMeta? = effects.first?.meta
+            var pipeline: MTLRenderPipelineState? = effects.first?.pipeline
+            if let path = value("--file") {
+                guard let source = try? String(contentsOfFile: path, encoding: .utf8) else { print("can't read \(path)"); return 2 }
+                let name = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
+                let result = lib.compile(source: source, fileName: name + ".metal")
+                if let err = result.error { print(err); return 1 }
+                meta = EffectMeta.parse(source: source, fallbackName: name)
+                pipeline = result.pipeline
+            }
+            func nums(_ flag: String, _ sep: Character) -> [Double]? {
+                value(flag).map { $0.split(separator: sep).compactMap { Double($0) } }
+            }
+            let stageWH = nums("--stage", "x") ?? [1920, 1080]
+            guard let dir = value("--render-sequence"), let meta, let ps = pipeline,
+                  let r = nums("--rect", ","), r.count == 4, stageWH.count == 2 else {
+                print("usage: --render-sequence dir (--only id | --file x.metal) --stage WxH --rect x,y,w,h [--window win.png]"); return 2
+            }
+            let stage = CGRect(x: 0, y: 0, width: stageWH[0], height: stageWH[1])
+            let win = CGRect(x: r[0], y: r[1], width: r[2], height: r[3])
+            let scale = Double(value("--scale") ?? "1") ?? 1
+            // Without --window, the built-in demo window is drawn at the rect's size.
+            let picture: CGImage? = value("--window")
+                .map { NSImage(contentsOfFile: $0)?.cgImage(forProposedRect: nil, context: nil, hints: nil) }
+                ?? Images.demoWindow(size: CGSize(width: win.width / scale, height: win.height / scale), scale: scale)
+            guard let src = picture, let tex = Renderer.shared.makeTexture(from: src) else { print("can't load the window picture"); return 1 }
+            let fps = Double(value("--fps") ?? "60") ?? 60
+            let canvas = (meta.padding.map { win.insetBy(dx: -$0 * scale, dy: -$0 * scale) } ?? stage)
+                .intersection(stage).integral
+            guard let off = OffscreenRenderer(width: Int(canvas.width), height: Int(canvas.height)) else { return 1 }
+
+            var u = ExitUniforms()
+            u.size = SIMD2(Float(canvas.width), Float(canvas.height))
+            u.win = SIMD4(Float(win.minX - canvas.minX), Float(win.minY - canvas.minY), Float(win.width), Float(win.height))
+            if let c = nums("--cursor", ","), c.count == 2 {
+                u.cursor = SIMD2(Float(c[0] - canvas.minX), Float(c[1] - canvas.minY))
+            } else {
+                u.cursor = SIMD2(u.win.x + Float(26 * scale), u.win.y + Float(24 * scale))
+            }
+            u.accent = SIMD4(0.0, 0.478, 1.0, 1)
+            u.duration = Float(meta.duration)
+            u.scale = Float(scale)
+            u.event = Int32((event ?? .close).rawValue)
+            u.hasSnapshot = 1
+            u.corner = Float(Double(value("--corner") ?? "") ?? (value("--window") == nil ? Images.demoCorner : 12) * scale)
+            u.seed = Float(value("--seed") ?? "0.37") ?? 0.37
+            u.shadow = args.contains("--shadow") ? 1 : 0
+
+            try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+            let count = Int((meta.duration * fps).rounded()) + 1
+            for i in 0..<count {
+                u.progress = Float(i) / Float(count - 1)
+                u.time = u.progress * u.duration
+                guard let img = off.render(ps, uniforms: u, texture: tex) else { return 1 }
+                try? Images.writePNG(img, to: URL(fileURLWithPath: dir).appendingPathComponent(String(format: "%04d.png", i)))
+            }
+            let info: [String: Any] = ["effect": meta.name, "frames": count, "fps": fps, "duration": meta.duration,
+                                       "canvas": ["x": canvas.minX, "y": canvas.minY, "w": canvas.width, "h": canvas.height]]
+            if let data = try? JSONSerialization.data(withJSONObject: info, options: [.prettyPrinted, .sortedKeys]) {
+                try? data.write(to: URL(fileURLWithPath: dir).appendingPathComponent("meta.json"))
+            }
+            print("wrote \(count) frames to \(dir)  canvas \(Int(canvas.minX)),\(Int(canvas.minY)) \(Int(canvas.width))x\(Int(canvas.height))")
             return 0
 
         case "--snapshot-ui":
@@ -123,6 +194,40 @@ enum DevTools {
                 if let id = gen.savedEffectID { print("saved: \(id)") }
                 return gen.status == .done ? 0 : 1
             }
+
+        case "--ai-ping":
+            // Checks AI services: --ai-ping [cli.codex,api.openai,…]  (default: the selected one; "all" = every installed CLI)
+            //   [--key-env VAR] [--base-url URL] [--model ID] [--models]   try an API without saving anything
+            let arg = value("--ai-ping") ?? ""
+            let ids: [String] = arg == "all"
+                ? CLIAgent.allCases.filter { CLILocator.locate($0) != nil }.map { AIProvider.cli($0).id }
+                : (arg.isEmpty || arg.hasPrefix("--") ? [Settings.shared.aiProviderID] : arg.split(separator: ",").map(String.init))
+            var failed = 0
+            for id in ids {
+                guard let p = AIProvider(id: id) else { print("✗ \(id): unknown provider"); failed += 1; continue }
+                let start = Date()
+                let key = value("--key-env").flatMap { ProcessInfo.processInfo.environment[$0] }
+                let base = value("--base-url"), model = value("--model")
+                let box = PingBox()
+                if args.contains("--models") {
+                    Task.detached {
+                        box.result = await Result {
+                            let ids = try await AIService.listModels(for: p, apiKey: key ?? "",
+                                                                     baseURL: base ?? Settings.shared.aiBaseURL(for: p))
+                            return "\(ids.count) models: " + ids.prefix(8).joined(separator: ", ")
+                        }
+                    }
+                } else {
+                    Task.detached { box.result = await Result { try await AIService.ping(p, apiKey: key, baseURL: base, model: model) } }
+                }
+                while box.result == nil { RunLoop.main.run(until: Date().addingTimeInterval(0.1)) }
+                let secs = String(format: "%.1fs", Date().timeIntervalSince(start))
+                switch box.result! {
+                case .success(let reply): print("✓ \(id)  \(secs)  \(reply.prefix(60))")
+                case .failure(let error): failed += 1; print("✗ \(id)  \(secs)  \(error.localizedDescription)")
+                }
+            }
+            return failed == 0 ? 0 : 1
 
         case "--bench":
             let screen = CGSize(width: 2560, height: 1600)
@@ -218,5 +323,20 @@ enum DevTools {
             rows.append((e.meta.name, renderFrames(e, pipeline: ps, count: frames, event: event, placeholder: placeholder, scale: 1)))
         }
         return Images.contactSheet(rows: rows, cell: CGSize(width: 295, height: 190))
+    }
+}
+
+private final class PingBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Result<String, Error>?
+    var result: Result<String, Error>? {
+        get { lock.withLock { value } }
+        set { lock.withLock { value = newValue } }
+    }
+}
+
+private extension Result where Failure == Error {
+    init(catching body: () async throws -> Success) async {
+        do { self = .success(try await body()) } catch { self = .failure(error) }
     }
 }

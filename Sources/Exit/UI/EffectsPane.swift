@@ -19,7 +19,10 @@ struct EffectsPane: View {
                     Spacer()
                     Button { nav.tab = .ai } label: { Label(T("Create with AI", "AI 生成"), systemImage: "wand.and.stars") }
                     Button { NSWorkspace.shared.open(Paths.userEffects) } label: { Label(T("Folder", "文件夹"), systemImage: "folder") }
-                    Button { if let url = URL(string: "https://github.com/kadaliao/exit/blob/main/docs/EFFECTS.md") { NSWorkspace.shared.open(url) } } label: {
+                    Button {
+                        let guide = T("EFFECTS.md", "EFFECTS.zh-CN.md")
+                        if let url = URL(string: "https://github.com/kadaliao/exit/blob/main/docs/\(guide)") { NSWorkspace.shared.open(url) }
+                    } label: {
                         Label(T("Guide", "编写指南"), systemImage: "book")
                     }
                 }
@@ -113,28 +116,37 @@ struct EffectCard: View {
 /// A looping live preview of an effect on the demo window.
 struct EffectThumbnail: NSViewRepresentable {
     @ObservedObject var effect: Effect
+    /// Change it to start the loop over (e.g. on hover).
+    var replay = 0
+
+    private var restartKey: String { "\(effect.id)#\(effect.revision)#\(replay)" }
 
     func makeNSView(context: Context) -> ThumbnailView {
         let v = ThumbnailView()
         v.effect = effect
+        v.restartKey = restartKey
         return v
     }
 
     func updateNSView(_ v: ThumbnailView, context: Context) {
+        // Restart only when the effect or its code changed, not on every SwiftUI update.
+        guard v.effect !== effect || v.restartKey != restartKey else { return }
         v.effect = effect
+        v.restartKey = restartKey
         v.restart()
     }
 }
 
 final class ThumbnailView: NSView, MTKViewDelegate {
     var effect: Effect?
+    var restartKey = ""
     private let mtk = MTKView(frame: .zero, device: Renderer.shared.device)
     private let windowLayer = CALayer()
     private let backdrop = CAGradientLayer()
     private var texture: MTLTexture?
     private var start = CACurrentMediaTime()
-    private static var sharedTexture: MTLTexture?
-    private static var sharedImage: CGImage?
+    /// Demo window picture and texture, light and dark, shared by every thumbnail.
+    private static var demo: [Bool: (image: CGImage, texture: MTLTexture)] = [:]
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -155,15 +167,28 @@ final class ThumbnailView: NSView, MTKViewDelegate {
         mtk.delegate = self
         addSubview(mtk)
 
-        if Self.sharedImage == nil {
-            Self.sharedImage = Images.demoWindow(size: CGSize(width: 720, height: 460), scale: 1)
-            Self.sharedTexture = Self.sharedImage.flatMap { Renderer.shared.makeTexture(from: $0) }
+        useDemoWindow()
+    }
+
+    private func useDemoWindow() {
+        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        if Self.demo[dark] == nil, let img = Images.demoWindow(size: CGSize(width: 720, height: 460), scale: 1, dark: dark),
+           let tex = Renderer.shared.makeTexture(from: img) {
+            Self.demo[dark] = (img, tex)
         }
-        texture = Self.sharedTexture
-        windowLayer.contents = Self.sharedImage
+        texture = Self.demo[dark]?.texture
+        windowLayer.contents = Self.demo[dark]?.image
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        useDemoWindow()
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    /// Purely visual: let clicks reach the SwiftUI button or tap gesture around it.
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     func restart() { start = CACurrentMediaTime() }
 

@@ -114,13 +114,19 @@ final class EffectLibrary: ObservableObject {
                 list.append(e)
             }
         }
-        list.sort { a, b in
+        effects = Self.sorted(list)
+        for e in list { compile(e, synchronously: synchronously) }
+    }
+
+    private static func sorted(_ list: [Effect]) -> [Effect] {
+        list.sorted { a, b in
             if a.isBuiltIn != b.isBuiltIn { return !a.isBuiltIn }   // user effects first
             return a.meta.displayName.localizedCompare(b.meta.displayName) == .orderedAscending
         }
-        effects = list
-        for e in list { compile(e, synchronously: synchronously) }
     }
+
+    /// Re-sorts after the interface language changes the display names.
+    func sortByName() { effects = Self.sorted(effects) }
 
     private func metalFiles(in dir: URL) -> [URL] {
         let items = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []

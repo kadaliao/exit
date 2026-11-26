@@ -127,7 +127,7 @@ enum Images {
     /// Stand-in card: app icon and window title on a frosted card.
     static func placeholder(size: CGSize, scale: CGFloat, icon: NSImage?, title: String?, corner: CGFloat) -> CGImage? {
         let size = CGSize(width: max(size.width, 40), height: max(size.height, 40))
-        let dark = NSApp?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let dark = AppAppearance.systemIsDark
         return draw(size: size, scale: scale) { _ in
             let bounds = CGRect(origin: .zero, size: size)
             let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: corner, yRadius: corner)

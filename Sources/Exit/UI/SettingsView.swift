@@ -34,11 +34,12 @@ final class SettingsNavigation: ObservableObject {
 
 struct SettingsView: View {
     @EnvironmentObject var nav: SettingsNavigation
+    @ObservedObject private var settings = Settings.shared
 
     var body: some View {
         NavigationSplitView {
             List(SettingsTab.allCases, selection: Binding(get: { nav.tab }, set: { if let t = $0 { nav.tab = t } })) { tab in
-                Label(tab.title, systemImage: tab.symbol).tag(tab)
+                SidebarRow(tab: tab).tag(tab)
             }
             .navigationSplitViewColumnWidth(190)
         } detail: {
@@ -53,6 +54,24 @@ struct SettingsView: View {
             }
             .navigationTitle(nav.tab.title)
         }
+        .id(settings.language)
+    }
+}
+
+/// A sidebar item; the AI item shows a spinner while an effect is being generated.
+private struct SidebarRow: View {
+    let tab: SettingsTab
+    @ObservedObject private var generator = EffectGenerator.shared
+
+    var body: some View {
+        HStack {
+            Label(tab.title, systemImage: tab.symbol)
+            if tab == .ai && generator.isWorking {
+                Spacer()
+                ProgressView().controlSize(.mini)
+                    .help(T("Generating an effect…", "正在生成特效…"))
+            }
+        }
     }
 }
 
@@ -60,25 +79,29 @@ struct SettingsView: View {
 
 struct GeneralPane: View {
     @ObservedObject var settings = Settings.shared
-    @ObservedObject var library = EffectLibrary.shared
 
     var body: some View {
         Form {
             Section {
                 Toggle(T("Play effects", "播放特效"), isOn: $settings.enabled)
             }
+            Section {
+                Picker(selection: $settings.language) {
+                    ForEach(AppLanguage.allCases) { Text($0.title).tag($0) }
+                } label: {
+                    // Both names, so it can be found whatever the current language is.
+                    Label(T("Language · 语言", "语言 · Language"), systemImage: "globe")
+                }
+                Picker(selection: $settings.appearance) {
+                    ForEach(AppAppearance.allCases) { Text($0.title).tag($0) }
+                } label: {
+                    Label(T("Appearance", "外观"), systemImage: "circle.lefthalf.filled")
+                }
+                .pickerStyle(.segmented)
+            }
             Section(T("What plays when…", "什么时候播放什么")) {
                 ForEach([WindowEvent.close, .quit, .open, .minimize]) { event in
-                    Picker(selection: binding(for: event)) {
-                        Text(T("Off", "关闭")).tag(Assignment.off)
-                        Text(T("Shuffle", "随机")).tag(Assignment.random)
-                        Divider()
-                        ForEach(library.effects.filter { $0.meta.events.contains(event) }) { e in
-                            Text(e.meta.displayName).tag(Assignment.effect(e.id))
-                        }
-                    } label: {
-                        Label(event.title, systemImage: event.symbol)
-                    }
+                    EffectAssignmentRow(event: event)
                 }
             }
             Section {
@@ -106,10 +129,6 @@ struct GeneralPane: View {
             }
         }
         .formStyle(.grouped)
-    }
-
-    private func binding(for event: WindowEvent) -> Binding<Assignment> {
-        Binding(get: { settings.assignment(for: event) }, set: { settings.assignments[event] = $0 })
     }
 }
 

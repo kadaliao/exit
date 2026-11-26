@@ -3,12 +3,8 @@ import SwiftUI
 
 struct AIPane: View {
     @ObservedObject var settings = Settings.shared
-    @StateObject private var generator = EffectGenerator()
-    @State private var prompt = ""
-    @State private var forOpen = false
-    @State private var apiKey = Keychain.read() ?? ""
+    @ObservedObject private var generator = EffectGenerator.shared
     @State private var showCode = false
-    @State private var cliPath: String?
 
     private let ideas: [String] = Lang.isChinese
         ? ["窗口像气球一样被戳破，碎片和彩带四散", "像一滴墨落进水里，晕开后消失", "黑客帝国式的绿色代码雨把窗口冲走",
@@ -22,7 +18,7 @@ struct AIPane: View {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(T("Describe the effect you want", "描述你想要的效果")).font(.headline)
-                    TextEditor(text: $prompt)
+                    TextEditor(text: $generator.prompt)
                         .font(.body)
                         .frame(minHeight: 70, maxHeight: 110)
                         .scrollContentBackground(.hidden)
@@ -32,13 +28,13 @@ struct AIPane: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack {
                             ForEach(ideas, id: \.self) { idea in
-                                Button(idea) { prompt = idea }
+                                Button(idea) { generator.prompt = idea }
                                     .buttonStyle(.bordered).controlSize(.small)
                             }
                         }
                     }
                     HStack {
-                        Picker("", selection: $forOpen) {
+                        Picker("", selection: $generator.forOpen) {
                             Text(T("For closing / quitting", "用于关闭 / 退出")).tag(false)
                             Text(T("For opening (decorates)", "用于打开（装饰）")).tag(true)
                         }
@@ -53,13 +49,14 @@ struct AIPane: View {
                             Button(T("Cancel", "取消")) { generator.cancel() }
                         } else {
                             Button {
-                                generator.generate(description: prompt, events: forOpen ? [.open] : [.close, .quit, .minimize])
+                                generator.generate(description: generator.prompt,
+                                                   events: generator.forOpen ? [.open] : [.close, .quit, .minimize])
                             } label: {
                                 Label(T("Generate", "生成"), systemImage: "wand.and.stars")
                             }
                             .keyboardShortcut(.return, modifiers: .command)
                             .buttonStyle(.borderedProminent)
-                            .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            .disabled(generator.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         }
                     }
                 }
@@ -84,7 +81,7 @@ struct AIPane: View {
                         Text(err).foregroundStyle(.red).textSelection(.enabled)
                     }
                     if let id = generator.savedEffectID, let effect = EffectLibrary.shared.effect(id: id) {
-                        GeneratedResult(effect: effect, forOpen: forOpen)
+                        GeneratedResult(effect: effect, forOpen: generator.resultForOpen)
                     }
                     if !generator.source.isEmpty {
                         DisclosureGroup(T("Shader source", "着色器源码"), isExpanded: $showCode) {
@@ -98,40 +95,9 @@ struct AIPane: View {
                 }
             }
 
-            Section(T("Claude", "Claude")) {
-                Picker(T("Use", "调用方式"), selection: $settings.aiProvider) {
-                    ForEach(AIProvider.allCases) { Text($0.title).tag($0) }
-                }
-                if settings.aiProvider == .api {
-                    SecureField(T("API key", "API Key"), text: $apiKey)
-                        .onSubmit { Keychain.write(apiKey) }
-                        .onChange(of: apiKey) { _, v in Keychain.write(v) }
-                    Text(T("Stored in your login Keychain. Requests go straight to api.anthropic.com.",
-                           "保存在登录钥匙串里，请求直接发往 api.anthropic.com。"))
-                        .font(.caption).foregroundStyle(.secondary)
-                } else {
-                    LabeledContent(T("Claude Code", "Claude Code")) {
-                        Text(cliPath ?? T("not found — install Claude Code or use an API key", "未找到——请安装 Claude Code 或改用 API Key"))
-                            .foregroundStyle(cliPath == nil ? .red : .secondary)
-                            .font(.callout)
-                    }
-                    Text(T("Runs `claude -p` with all tools disabled, using your existing Claude Code login.",
-                           "以禁用全部工具的方式运行 `claude -p`，使用你已经登录的 Claude Code 账号。"))
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                TextField(T("Model", "模型"), text: $settings.aiModel)
-                Picker(T("Thinking", "思考强度"), selection: $settings.aiEffort) {
-                    Text(T("Quick", "快速")).tag("low")
-                    Text(T("Balanced", "均衡")).tag("medium")
-                    Text(T("Best (slow)", "最佳（较慢）")).tag("high")
-                }
-            }
+            AIServiceSection()
         }
         .formStyle(.grouped)
-        .task {
-            let path = await Task.detached { ClaudeCodeBackend.locate()?.path }.value
-            cliPath = path
-        }
     }
 }
 

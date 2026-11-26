@@ -155,7 +155,7 @@ final class ExitEngine: NSObject, WindowTrackerDelegate, EventInterceptorDelegat
         let vf = screen.visibleFrame
         let ak = CGRect(x: vf.midX - size.width / 2, y: vf.midY - size.height / 2, width: size.width, height: size.height)
         let frame = CGRect(x: ak.minX, y: ScreenGeometry.primaryHeight - ak.maxY, width: size.width, height: size.height)
-        let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let dark = AppAppearance.systemIsDark
         guard let img = Images.demoWindow(size: size, scale: screen.backingScaleFactor, dark: dark),
               let tex = Renderer.shared.makeTexture(from: img) else { return }
         let ev = event ?? (effect.meta.events.contains(.close) ? .close : effect.meta.events.first ?? .close)
