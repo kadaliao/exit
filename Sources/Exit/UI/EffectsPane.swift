@@ -1,5 +1,5 @@
 import AppKit
-import MetalKit
+import Metal
 import SwiftUI
 
 struct EffectsPane: View {
@@ -137,14 +137,22 @@ struct EffectThumbnail: NSViewRepresentable {
     }
 }
 
-final class ThumbnailView: NSView, MTKViewDelegate {
+/// Draws one looping thumbnail. Each frame is computed on the main thread (cheap) and rendered
+/// on a background queue: a Metal layer that isn't being composited hands out no new drawables,
+/// and waiting for one on the main thread froze clicks in Settings for up to a second per frame.
+final class ThumbnailView: NSView {
     var effect: Effect?
     var restartKey = ""
-    private let mtk = MTKView(frame: .zero, device: Renderer.shared.device)
+    private let metalLayer = CAMetalLayer()
     private let windowLayer = CALayer()
     private let backdrop = CAGradientLayer()
     private var texture: MTLTexture?
     private var start = CACurrentMediaTime()
+    private var displayLink: CADisplayLink?
+    private var occlusionToken: NSObjectProtocol?
+    private let renderQueue = DispatchQueue(label: "exit.thumbnail", qos: .userInitiated)
+    /// Main thread: the previous frame is still being rendered.
+    private var rendering = false
     /// Demo window picture and texture, light and dark, shared by every thumbnail.
     private static var demo: [Bool: (image: CGImage, texture: MTLTexture)] = [:]
 
@@ -158,14 +166,12 @@ final class ThumbnailView: NSView, MTKViewDelegate {
         layer?.addSublayer(windowLayer)
         windowLayer.contentsGravity = .resize
 
-        mtk.colorPixelFormat = .bgra8Unorm
-        mtk.framebufferOnly = true
-        mtk.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
-        mtk.layer?.isOpaque = false
-        (mtk.layer as? CAMetalLayer)?.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
-        mtk.preferredFramesPerSecond = 60
-        mtk.delegate = self
-        addSubview(mtk)
+        metalLayer.device = Renderer.shared.device
+        metalLayer.pixelFormat = .bgra8Unorm
+        metalLayer.framebufferOnly = true
+        metalLayer.isOpaque = false
+        metalLayer.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
+        layer?.addSublayer(metalLayer)
 
         useDemoWindow()
     }
@@ -187,6 +193,10 @@ final class ThumbnailView: NSView, MTKViewDelegate {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    deinit {
+        if let occlusionToken { NotificationCenter.default.removeObserver(occlusionToken) }
+    }
+
     /// Purely visual: let clicks reach the SwiftUI button or tap gesture around it.
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
@@ -203,21 +213,49 @@ final class ThumbnailView: NSView, MTKViewDelegate {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         backdrop.frame = bounds
-        mtk.frame = bounds
+        metalLayer.frame = bounds
         windowLayer.frame = windowRect
         CATransaction.commit()
+        updateDrawableSize()
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        updateDrawableSize()
+    }
+
+    private func updateDrawableSize() {
+        let scale = window?.backingScaleFactor ?? 2
+        metalLayer.contentsScale = scale
+        metalLayer.drawableSize = CGSize(width: max(bounds.width * scale, 1), height: max(bounds.height * scale, 1))
     }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        mtk.isPaused = window == nil
+        // The display link holds on to this view, so it only exists while the view is in a window.
+        displayLink?.invalidate()
+        displayLink = nil
+        if let occlusionToken { NotificationCenter.default.removeObserver(occlusionToken) }
+        occlusionToken = nil
+        guard let window else { return }
+        let link = displayLink(target: self, selector: #selector(tick))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
+        link.add(to: .main, forMode: .common)
+        displayLink = link
+        occlusionToken = NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification,
+                                                                object: window, queue: .main) { [weak self] _ in self?.updatePaused() }
+        updatePaused()
+        updateDrawableSize()
     }
 
-    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
+    /// Settings stays alive after it's closed, thumbnails and all: draw only while it's on screen.
+    private func updatePaused() {
+        displayLink?.isPaused = !(window?.occlusionState.contains(.visible) ?? false)
+    }
 
-    func draw(in view: MTKView) {
-        guard let effect, let pipeline = effect.pipeline, let pass = view.currentRenderPassDescriptor,
-              let drawable = view.currentDrawable, let cb = Renderer.shared.queue.makeCommandBuffer() else { return }
+    @objc private func tick(_ link: CADisplayLink) {
+        guard !rendering, !visibleRect.isEmpty, !isHiddenOrHasHiddenAncestor,
+              let effect, let pipeline = effect.pipeline else { return }
         let isOpen = effect.meta.events == [.open]
         let duration = effect.meta.duration
         let cycle = duration + 0.9
@@ -230,10 +268,11 @@ final class ThumbnailView: NSView, MTKViewDelegate {
         windowLayer.isHidden = !isOpen && t < duration
         CATransaction.commit()
 
-        let px = view.drawableSize.width / max(bounds.width, 1)
+        let size = metalLayer.drawableSize
+        let px = size.width / max(bounds.width, 1)
         let r = windowRect
         var u = ExitUniforms()
-        u.size = SIMD2(Float(view.drawableSize.width), Float(view.drawableSize.height))
+        u.size = SIMD2(Float(size.width), Float(size.height))
         u.win = SIMD4(Float(r.minX * px), Float((bounds.height - r.maxY) * px), Float(r.width * px), Float(r.height * px))
         u.cursor = SIMD2(u.win.x + u.win.z * 0.04, u.win.y + u.win.w * 0.05)
         u.progress = Float(t < duration ? progress : (isOpen ? 1 : 0))
@@ -250,8 +289,18 @@ final class ThumbnailView: NSView, MTKViewDelegate {
             // Pause on the intact window between loops.
             u.progress = 0
         }
-        Renderer.shared.encode(pipeline, uniforms: u, texture: texture, pass: pass, commandBuffer: cb)
-        cb.present(drawable)
-        cb.commit()
+
+        rendering = true
+        let layer = metalLayer, texture = texture, uniforms = u
+        renderQueue.async { [weak self] in
+            if let drawable = layer.nextDrawable(), let cb = Renderer.shared.queue.makeCommandBuffer() {
+                let pass = MTLRenderPassDescriptor()
+                pass.colorAttachments[0].texture = drawable.texture
+                Renderer.shared.encode(pipeline, uniforms: uniforms, texture: texture, pass: pass, commandBuffer: cb)
+                cb.present(drawable)
+                cb.commit()
+            }
+            DispatchQueue.main.async { self?.rendering = false }
+        }
     }
 }

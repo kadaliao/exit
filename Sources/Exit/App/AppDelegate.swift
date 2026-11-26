@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.appearance = Settings.shared.appearance.nsAppearance
+        installMainMenu()
         EffectLibrary.shared.loadAll()
         EffectLibrary.shared.startWatching()
 
@@ -60,6 +61,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.permissionTimer = nil
             ExitEngine.shared.start()
         }
+    }
+
+    /// Exit shows no menu bar of its own, but the Settings window's shortcuts (⌘W, ⌘M, ⌘Q, and
+    /// cut / copy / paste in text fields) still come from the main menu.
+    private func installMainMenu() {
+        let main = NSMenu()
+        func item(_ title: String, _ action: Selector, _ key: String,
+                  _ modifiers: NSEvent.ModifierFlags = .command, target: AnyObject? = nil) -> NSMenuItem {
+            let i = NSMenuItem(title: title, action: action, keyEquivalent: key)
+            i.keyEquivalentModifierMask = modifiers
+            i.target = target
+            return i
+        }
+        func add(_ title: String, _ items: [NSMenuItem]) {
+            let menu = NSMenu(title: title)
+            items.forEach(menu.addItem)
+            let holder = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            holder.submenu = menu
+            main.addItem(holder)
+        }
+        add("Exit", [
+            item(T("Settings…", "设置…"), #selector(openSettingsAction), ",", target: self),
+            .separator(),
+            item(T("Quit Exit", "退出 Exit"), #selector(NSApplication.terminate(_:)), "q"),
+        ])
+        add(T("Edit", "编辑"), [
+            item(T("Undo", "撤销"), Selector(("undo:")), "z"),
+            item(T("Redo", "重做"), Selector(("redo:")), "z", [.command, .shift]),
+            .separator(),
+            item(T("Cut", "剪切"), #selector(NSText.cut(_:)), "x"),
+            item(T("Copy", "拷贝"), #selector(NSText.copy(_:)), "c"),
+            item(T("Paste", "粘贴"), #selector(NSText.paste(_:)), "v"),
+            item(T("Select All", "全选"), #selector(NSText.selectAll(_:)), "a"),
+        ])
+        add(T("Window", "窗口"), [
+            item(T("Close", "关闭"), #selector(NSWindow.performClose(_:)), "w"),
+            item(T("Minimize", "最小化"), #selector(NSWindow.performMiniaturize(_:)), "m"),
+        ])
+        NSApp.mainMenu = main
     }
 
     private func updateStatusIcon() {
@@ -177,7 +217,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let tab { navigation.tab = tab }
         if settingsWindow == nil {
             let host = NSHostingController(rootView: SettingsView().environmentObject(navigation))
-            let w = NSWindow(contentViewController: host)
+            let w = ExitWindow(contentViewController: host)
             w.title = "Exit"
             w.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
             w.setContentSize(NSSize(width: 860, height: 600))
@@ -188,6 +228,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
+    }
+}
+
+/// Exit's own window. Closing or minimizing it (button, ⌘W, ⌘M) waits a moment while the engine
+/// photographs it, so its effect starts from the real last frame.
+final class ExitWindow: NSWindow {
+    private var waiting = false
+
+    override func performClose(_ sender: Any?) {
+        hold(.close) { super.performClose(sender) }
+    }
+
+    override func performMiniaturize(_ sender: Any?) {
+        hold(.minimize) { super.performMiniaturize(sender) }
+    }
+
+    private func hold(_ event: WindowEvent, then action: @escaping () -> Void) {
+        guard !waiting else { return }
+        waiting = true
+        ExitEngine.shared.prepareOwnWindow(self, for: event) { [weak self] in
+            self?.waiting = false
+            action()
+        }
     }
 }
 

@@ -167,6 +167,9 @@ enum ScreenGeometry {
         CGRect(x: r.minX, y: primaryHeight - r.maxY, width: r.width, height: r.height)
     }
 
+    /// Converts an AppKit rect into top-left-origin global coordinates (the flip is its own inverse).
+    static func toGlobal(_ r: CGRect) -> CGRect { toAppKit(r) }
+
     static func toAppKit(_ p: CGPoint) -> CGPoint {
         CGPoint(x: p.x, y: primaryHeight - p.y)
     }

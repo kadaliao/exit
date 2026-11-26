@@ -212,7 +212,8 @@ final class ExitEngine: NSObject, WindowTrackerDelegate, EventInterceptorDelegat
     // MARK: EventInterceptorDelegate (event-tap thread)
 
     func interceptorShouldHold(_ intent: Intent) -> Bool {
-        guard let focused = tracker.focusedWindow else { return false }
+        // Exit's own windows are photographed from inside the app (see `prepareOwnWindow`).
+        guard let focused = tracker.focusedWindow, focused.pid != getpid() else { return false }
         return stateLock.withLock {
             holdAllowed.contains(intent.event) && !excludedBundles.contains(focused.bundleID ?? "")
         }
@@ -245,11 +246,11 @@ final class ExitEngine: NSObject, WindowTrackerDelegate, EventInterceptorDelegat
     func interceptorMouseDown(at point: CGPoint) {
         let allowed = stateLock.withLock { holdAllowed.contains(.close) || holdAllowed.contains(.minimize) }
         guard allowed else { return }
-        // Only clicks near the top edge of a visible window can hit its traffic lights.
-        let hitsTitleBar = tracker.onScreenWindows().values.contains { r in
-            r.contains(point) && point.y - r.minY < 56 && point.x - r.minX < 140
-        }
-        guard hitsTitleBar else { return }
+        // Only clicks near the top-left corner of the window under the cursor can hit its traffic
+        // lights. Exit's own windows are left alone: looking them up through Accessibility means
+        // asking our own main thread mid-click, and they're handled inside the app anyway.
+        guard let top = tracker.topWindow(at: point), top.pid != getpid(),
+              point.y - top.frame.minY < 56, point.x - top.frame.minX < 140 else { return }
         stateLock.withLock { buttonPending = true }
 
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
@@ -271,6 +272,27 @@ final class ExitEngine: NSObject, WindowTrackerDelegate, EventInterceptorDelegat
                 _ = await self.snapshots.capture(id, intent: true)
                 self.finishButtonCapture()
             }
+        }
+    }
+
+    // MARK: Exit's own windows (main thread)
+
+    /// Called before one of Exit's own windows closes or minimizes: takes a fresh picture of it
+    /// first (for at most a moment), like the held ⌘W / close-button click in other apps.
+    func prepareOwnWindow(_ window: NSWindow, for event: WindowEvent, then proceed: @escaping () -> Void) {
+        let allowed = stateLock.withLock { holdAllowed.contains(event) }
+        guard running, allowed, window.windowNumber > 0 else { proceed(); return }
+        let id = CGWindowID(window.windowNumber)
+        var done = false
+        let go = {
+            guard !done else { return }
+            done = true
+            proceed()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.16, execute: go)
+        Task.detached(priority: .userInitiated) { [snapshots] in
+            _ = await snapshots.capture(id, intent: true)
+            DispatchQueue.main.async(execute: go)
         }
     }
 
