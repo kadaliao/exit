@@ -10,13 +10,10 @@ VERSION="${VERSION:-0.1.0}"
 BUILD="${BUILD:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}"
 APP=build/Exit.app
 
-if [[ "${RELEASE:-0}" == 1 ]]; then
-  swift build -c release --arch arm64 --arch x86_64
-  BIN=.build/apple/Products/Release/Exit
-else
-  swift build -c release
-  BIN=.build/release/Exit
-fi
+ARGS=(-c release)
+[[ "${RELEASE:-0}" == 1 ]] && ARGS+=(--arch arm64 --arch x86_64)
+swift build "${ARGS[@]}"
+BIN="$(swift build "${ARGS[@]}" --show-bin-path)/Exit"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/Effects"
