@@ -1,5 +1,7 @@
 # Writing Exit effects
 
+[中文版](EFFECTS.zh-CN.md)
+
 An Exit effect is one `.metal` file. Drop it into
 `~/Library/Application Support/Exit/Effects/` and it shows up in the menu immediately.
 Every save recompiles it on the fly; compile errors are shown in Settings → Effects.

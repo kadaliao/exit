@@ -7,7 +7,101 @@ entrance too.
 
 [中文说明](README.zh-CN.md)
 
-![Twelve closing effects, frame by frame](docs/images/effects.jpg)
+## Effects
+
+### Closing effects
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/effects/oldtv.gif" width="400" alt="Old TV"><br>
+      <b>Old TV</b><br>
+      CRT power-off: collapses to a glowing line, then a dot.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/effects/pixel-dissolve.gif" width="400" alt="Pixel Dissolve"><br>
+      <b>Pixel Dissolve</b><br>
+      The window crumbles into square pixels that lift off in a wave and float away.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/effects/ascii.gif" width="400" alt="ASCII"><br>
+      <b>ASCII</b><br>
+      The window turns into phosphor-green characters from the edges inward, then rains away column by column.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/effects/glitch.gif" width="400" alt="Glitch"><br>
+      <b>Glitch</b><br>
+      Digital breakdown: RGB split, torn slices and noise bursts escalate until the signal drops.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/effects/burn.gif" width="400" alt="Burn"><br>
+      <b>Burn</b><br>
+      A ragged line of embers eats the window, leaving a charred edge and rising sparks.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/effects/black-hole.gif" width="400" alt="Black Hole"><br>
+      <b>Black Hole</b><br>
+      A singularity opens at the center, twists the window into a spiral and swallows it behind a glowing accretion ring.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/effects/dust.gif" width="400" alt="Dust"><br>
+      <b>Dust</b><br>
+      A sweep turns the window into fine dust that drifts up and away on the wind.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/effects/shatter.gif" width="400" alt="Shatter"><br>
+      <b>Shatter</b><br>
+      Cracks like glass from the click point; shards tumble and fall away.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/effects/sticker-peel.gif" width="400" alt="Sticker Peel"><br>
+      <b>Sticker Peel</b><br>
+      Peels up from a corner like a die-cut sticker, then the whole sticker lifts away.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/effects/confetti.gif" width="400" alt="Confetti"><br>
+      <b>Confetti</b><br>
+      The window pops and bursts into a shower of fluttering paper confetti.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/effects/melt.gif" width="400" alt="Melt"><br>
+      <b>Melt</b><br>
+      Melts like warm wax: the bottom edge sags into glossy drips that run down and away.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/effects/vacuum.gif" width="400" alt="Vacuum"><br>
+      <b>Vacuum</b><br>
+      Sucked into the spot you clicked, swirling down to a point.
+    </td>
+  </tr>
+</table>
+
+### Opening effects
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/effects/glint.gif" width="400" alt="Glint"><br>
+      <b>Glint</b><br>
+      A sheet of light sweeps across the new window as its edge glows in your accent color.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/effects/sparkle.gif" width="400" alt="Sparkle"><br>
+      <b>Sparkle</b><br>
+      A new window arrives with twinkling stars along its edges and a soft ring of light.
+    </td>
+  </tr>
+</table>
 
 ## Highlights
 
@@ -22,10 +116,12 @@ entrance too.
 - **Effects are just files.** Each effect is one Metal shader in
   `~/Library/Application Support/Exit/Effects/`. Edit it and it recompiles the moment you
   save. Share it by sending the file. See the [authoring guide](docs/EFFECTS.md).
-- **Describe an effect, get an effect.** Type "the window pops like a balloon" and Claude
-  writes the shader. Exit compiles it, renders test frames to check it starts seamlessly,
-  ends cleanly and runs fast, sends any problems back to Claude, and plays the result.
-  Works with your local Claude Code login or an Anthropic API key.
+- **Describe an effect, get an effect.** Type "the window pops like a balloon" and an AI
+  model writes the shader. Exit compiles it, renders test frames to check it starts
+  seamlessly, ends cleanly and runs fast, sends any problems back to the model, and plays
+  the result. Use a coding CLI you're already signed in to (Claude Code, Codex, Gemini CLI,
+  OpenCode or Pi), or your own API key for Anthropic, OpenAI, Gemini, OpenRouter, DeepSeek,
+  Kimi, Qwen, GLM, or any OpenAI- or Anthropic-compatible endpoint, including local Ollama.
 - **Stays out of the way.** Click-through overlays that never take focus, multiple
   displays, Spaces, full-screen apps, per-app exclusions, minimum window size, and it goes
   still when Reduce Motion is on.
@@ -57,7 +153,7 @@ open build/Exit.app
 
 Window pictures live in memory for a few seconds and are never written to disk or sent
 anywhere. Exit makes no network requests, except when you ask it to generate an effect
-with Claude.
+with AI.
 
 ## Making effects
 

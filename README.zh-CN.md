@@ -6,7 +6,7 @@
 
 ## 亮点
 
-- **14 个内置特效**，Metal 渲染，跟随屏幕刷新率：老电视、像素消散、ASCII、故障、燃烧、
+- **14 个内置特效**，Metal 渲染，跟随屏幕刷新率：老电视、像素消散、字符矩阵、故障、燃烧、
   黑洞、灰飞烟灭、玻璃碎裂、贴纸撕下、彩纸礼花、融化、吸入光标，以及用于窗口打开的
   流光、星光。
 - **真实的最后一帧。** 按下 ⌘W / ⌘Q / ⌘M 或点击关闭按钮时，Exit 先把输入停留几毫秒，
@@ -14,14 +14,110 @@
 - **不只是关闭。** 关闭窗口、退出 App、打开窗口、最小化可以分别指定特效：固定一个、
   随机，或者关掉。
 - **特效就是文件。** 每个特效是 `~/Library/Application Support/Exit/Effects/` 里的一个
-  Metal 着色器文件，保存即重新编译，发文件就能分享。写法见[编写指南](docs/EFFECTS.md)。
-- **一句话生成特效。** 输入“窗口像气球一样被戳破”，Claude 写出着色器；Exit 编译后渲染
-  测试帧，自动检查开头是否无缝衔接、结尾是否干净、速度够不够快，有问题就反馈给 Claude
-  修改，最后直接播放给你看。可以用本机的 Claude Code 登录，也可以填 Anthropic API Key。
+  Metal 着色器文件，保存即重新编译，发文件就能分享。写法见[编写指南](docs/EFFECTS.zh-CN.md)。
+- **一句话生成特效。** 输入“窗口像气球一样被戳破”，AI 模型写出着色器；Exit 编译后渲染
+  测试帧，自动检查开头是否无缝衔接、结尾是否干净、速度够不够快，有问题就反馈给模型
+  修改，最后直接播放给你看。可以直接用本机已登录的 Claude Code、Codex、Gemini CLI、
+  OpenCode 或 Pi，也可以填自己的 API Key：Anthropic、OpenAI、Gemini、OpenRouter、DeepSeek、
+  Kimi、通义千问、智谱 GLM，或任何 OpenAI / Anthropic 兼容的服务（包括本地 Ollama）。
 - **不打扰。** 叠加层可点穿、不抢焦点；支持多显示器、多桌面空间、全屏 App；可按 App
   排除、设置最小窗口尺寸；开启“减弱动态效果”时自动不播放。
 
-![12 个关闭特效的逐帧画面](docs/images/effects.jpg)
+## 特效
+
+### 退场特效
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/effects/oldtv.gif" width="400" alt="老电视"><br>
+      <b>老电视</b><br>
+      显像管关机：压成一道亮线，再缩成一个光点。
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/effects/pixel-dissolve.gif" width="400" alt="像素消散"><br>
+      <b>像素消散</b><br>
+      窗口碎成方块像素，像波浪一样一块块飘起、缩小、消散。
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/effects/ascii.gif" width="400" alt="字符矩阵"><br>
+      <b>字符矩阵</b><br>
+      窗口从四周向内变成荧光绿字符，再像字符雨一样一列列落下消失。
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/effects/glitch.gif" width="400" alt="故障"><br>
+      <b>故障</b><br>
+      数字信号崩坏：RGB 分离、画面撕裂、噪点爆发越来越强，最后信号中断。
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/effects/burn.gif" width="400" alt="燃烧"><br>
+      <b>燃烧</b><br>
+      一道参差的火线烧过窗口，留下焦黑的边缘和向上飘的火星。
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/effects/black-hole.gif" width="400" alt="黑洞"><br>
+      <b>黑洞</b><br>
+      窗口中心裂开一个奇点，把窗口拧成漩涡吞进去，吸积环闪耀后坍缩消失。
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/effects/dust.gif" width="400" alt="灰飞烟灭"><br>
+      <b>灰飞烟灭</b><br>
+      窗口从一侧开始化成细小的灰烬，被风吹散、飘向远处。
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/effects/shatter.gif" width="400" alt="玻璃碎裂"><br>
+      <b>玻璃碎裂</b><br>
+      从点击处像玻璃一样裂开，碎片翻滚着坠落。
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/effects/sticker-peel.gif" width="400" alt="贴纸撕下"><br>
+      <b>贴纸撕下</b><br>
+      像一张贴纸那样从一角卷起，随后整张被揭起拿走。
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/effects/confetti.gif" width="400" alt="彩纸礼花"><br>
+      <b>彩纸礼花</b><br>
+      窗口“啵”地一下炸成漫天飘落的彩色纸屑。
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/effects/melt.gif" width="400" alt="融化"><br>
+      <b>融化</b><br>
+      像受热的蜡一样融化：底边垂成一道道发亮的蜡滴，往下流走。
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/effects/vacuum.gif" width="400" alt="吸入光标"><br>
+      <b>吸入光标</b><br>
+      被吸进你点击的位置，打着旋缩成一个点。
+    </td>
+  </tr>
+</table>
+
+### 登场特效
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/effects/glint.gif" width="400" alt="流光"><br>
+      <b>流光</b><br>
+      一道光扫过新窗口，边缘以系统强调色微微亮起。
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/effects/sparkle.gif" width="400" alt="星光"><br>
+      <b>星光</b><br>
+      新窗口出现时，边缘闪起点点星光，并荡开一圈柔和的光环。
+    </td>
+  </tr>
+</table>
 
 ## 安装
 
@@ -48,12 +144,12 @@ open build/Exit.app
 | 辅助功能（必需） | 感知窗口的打开、关闭、最小化；在 ⌘W / ⌘Q / ⌘M 和点击关闭按钮时短暂停留，拍下最后一帧。只检查这几个快捷键，其他按键原样放行。 |
 | 录屏（可选） | 让动画从窗口的真实画面开始。没有这个权限时，会用带 App 图标的卡片代替。 |
 
-窗口画面只在内存里停留几秒，不会写入磁盘，也不会发送到任何地方。除了你主动用 Claude
+窗口画面只在内存里停留几秒，不会写入磁盘，也不会发送到任何地方。除了你主动用 AI
 生成特效，Exit 不发起任何网络请求。
 
 ## 写特效
 
-见 [docs/EFFECTS.md](docs/EFFECTS.md)。命令行工具：
+见 [docs/EFFECTS.zh-CN.md](docs/EFFECTS.zh-CN.md)。命令行工具：
 
 ```sh
 Exit.app/Contents/MacOS/Exit --check                       # 编译全部特效
