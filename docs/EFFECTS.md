@@ -151,10 +151,17 @@ float4 effect(float2 p, constant Exit& u, texture2d<float> tex) {
 
 ## Sharing it
 
-Click **Submit** (the share icon) on your effect's card in Settings → Effects. Exit runs
-the checks, copies the code and opens a form on
-[exit-effects](https://github.com/kadaliao/exit-effects/issues/new?template=submit-effect.yml).
-A bot compiles it, checks the first and last frames and the speed, renders a preview, and
-opens a pull request; after a review it's in everyone's Settings → Market. Give it a
-`@name`, `@description` and `@author` (and the `.zh` lines if you can). Effects in the
-market are MIT licensed.
+Ask your coding agent (Claude Code, Codex, …) to submit it to the market; the
+[agent guide](https://github.com/kadaliao/exit-effects/blob/main/AGENTS.md) tells it how.
+Settings → Market → **Copy Prompt** copies a request you can paste. Under the hood it runs
+
+```sh
+Exit.app/Contents/MacOS/Exit --market submit my-effect --wait
+```
+
+which checks the effect, opens a submission on
+[exit-effects](https://github.com/kadaliao/exit-effects) with the GitHub CLI and waits for
+the market's bot: it checks the first and last frames and the speed again, renders a
+preview and opens a pull request with you as the author. After a review it's in everyone's
+Settings → Market. Give it a `@name`, `@description` and `@author` (and the `.zh` lines if
+you can). Effects in the market are MIT licensed.

@@ -17,8 +17,9 @@
   Metal 着色器文件，保存即重新编译，发文件就能分享。写法见[编写指南](docs/EFFECTS.zh-CN.md)。
 - **特效市场。** “设置 → 特效市场”里是其他 Exit 用户做的特效（也可以[在网页上浏览](https://kadaliao.github.io/exit-effects/)）。
   先在屏幕上试玩，喜欢就安装，之后会自动更新；也可以订阅，新上架的特效自动装上。
-  自己做了满意的特效，在它的卡片上点**投稿**：机器人会检查、渲染预览，并在
-  [exit-effects](https://github.com/kadaliao/exit-effects) 上自动提交 PR。
+  自己做了满意的特效，让你的 coding agent 帮你投稿：`Exit --market submit` 会检查特效并发到
+  [exit-effects](https://github.com/kadaliao/exit-effects)，机器人渲染预览后自动提交 PR
+  （[agent 投稿指南](https://github.com/kadaliao/exit-effects/blob/main/AGENTS.md)）。
 - **一句话生成特效。** 输入“窗口像气球一样被戳破”，AI 模型写出着色器；Exit 编译后渲染
   测试帧，自动检查开头是否无缝衔接、结尾是否干净、速度够不够快，有问题就反馈给模型
   修改，最后直接播放给你看。可以直接用本机已登录的 Claude Code、Codex、Gemini CLI、
@@ -162,6 +163,7 @@ Exit.app/Contents/MacOS/Exit --check                       # 编译全部特效
 Exit.app/Contents/MacOS/Exit --validate --only my-effect   # 检查无缝开头、干净结尾、性能
 Exit.app/Contents/MacOS/Exit --render-sheet out.png --only my-effect
 Exit.app/Contents/MacOS/Exit --market list                 # 还有 install ID、uninstall ID
+Exit.app/Contents/MacOS/Exit --market submit my-effect --wait   # 投稿到特效市场（需要 gh）
 ```
 
 加上 `--effects-dir 目录` 可以只测试那个目录里的文件，不受你自己的特效干扰。

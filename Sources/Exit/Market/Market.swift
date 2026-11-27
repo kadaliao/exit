@@ -122,7 +122,6 @@ struct MarketSource: Hashable, Identifiable {
 
     static let official = MarketSource(base: URL(string: "https://kadaliao.github.io/exit-effects/")!)
     static let officialMirrors = [URL(string: "https://cdn.jsdelivr.net/gh/kadaliao/exit-effects@gh-pages/")!]
-    static let submitForm = "https://github.com/kadaliao/exit-effects/issues/new"
 
     var isOfficial: Bool { self == .official }
 
@@ -531,56 +530,5 @@ final class MarketStore: ObservableObject {
 
     func homepage(for source: MarketSource) -> URL? {
         URL.web(indexes[source.id]?.homepage) ?? source.base
-    }
-}
-
-// MARK: - Submitting
-
-/// Sends one of the user's effects to the official market as a GitHub issue that a bot turns
-/// into a pull request.
-@MainActor
-enum MarketSubmit {
-    /// GitHub rejects issue links much longer than this, so bigger files go by clipboard only.
-    private static let maxPrefill = 5500
-
-    static func submit(_ effect: Effect) {
-        guard let source = try? String(contentsOf: effect.url, encoding: .utf8) else { return }
-        let meta = EffectMeta.parse(source: source, fallbackName: effect.id)
-        Task {
-            let problems = await Task.detached(priority: .userInitiated) { EffectGenerator.validate(source) }.value
-            var missing: [String] = []
-            if meta.description == nil { missing.append("@description") }
-            let alert = NSAlert()
-            if problems.isEmpty && missing.isEmpty {
-                alert.messageText = T("Submit “\(meta.displayName)” to the market?", "把“\(meta.displayName)”投稿到特效市场？")
-                alert.informativeText = T(
-                    "Exit copies the code and opens a form on GitHub (you need a GitHub account). If the code box is empty, paste into it, then click Create. A bot checks the effect and renders a preview; after a quick review it appears in the market for everyone. You’re credited as its author.",
-                    "Exit 会复制代码并在 GitHub 上打开投稿表单（需要 GitHub 账号）。如果源码框是空的，粘贴进去，再点 Create。机器人会检查特效并渲染预览，审核通过后所有人都能在市场里看到它，作者署你的名字。")
-                alert.addButton(withTitle: T("Open GitHub", "打开 GitHub"))
-            } else {
-                alert.alertStyle = .warning
-                alert.messageText = T("“\(meta.displayName)” doesn’t pass the market’s checks yet", "“\(meta.displayName)”还过不了市场的检查")
-                let lines = problems + missing.map { T("The header has no \($0) line.", "头部缺少 \($0) 这一行。") }
-                alert.informativeText = lines.map { "• " + $0 }.joined(separator: "\n")
-                    + T("\n\nFix it first (the AI pane can help), or submit anyway and fix it on GitHub.",
-                        "\n\n先改好再投（可以让 AI 帮忙），或者先投稿，再到 GitHub 上修改。")
-                alert.addButton(withTitle: T("Submit Anyway", "仍然投稿"))
-            }
-            alert.addButton(withTitle: T("Cancel", "取消"))
-            guard alert.runModal() == .alertFirstButtonReturn else { return }
-            open(source: source, id: effect.id, name: meta.name)
-        }
-    }
-
-    private static func open(source: String, id: String, name: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(source, forType: .string)
-        // Encode everything but unreserved characters: GitHub reads a bare "+" as a space.
-        let unreserved = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
-        func enc(_ s: String) -> String { s.addingPercentEncoding(withAllowedCharacters: unreserved) ?? "" }
-        var link = MarketSource.submitForm + "?template=submit-effect.yml&title=" + enc("[Effect] \(name)") + "&effect-id=" + enc(id)
-        let code = "&source=" + enc(source)
-        if link.count + code.count < maxPrefill { link += code }
-        if let url = URL(string: link) { NSWorkspace.shared.open(url) }
     }
 }

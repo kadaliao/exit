@@ -9,6 +9,7 @@ import SwiftUI
 ///   Exit --validate [--budget 7]          the AI generator's checks (seamless start, clean end, speed)
 ///   Exit --version
 ///   Exit --market [list | update | install ID | uninstall ID]   the effect market, from the terminal
+///   Exit --market submit FILE|ID [--notes TEXT] [--wait] [--dry-run]   send an effect to the market (for agents)
 /// Add `--effects-dir DIR` to read effects from DIR instead of your own folder (installed market
 /// effects are skipped too), so CI and reviewers test exactly the files in front of them.
 enum DevTools {
@@ -177,6 +178,11 @@ enum DevTools {
         case "--market":
             let i = args.firstIndex(of: "--market")!
             let rest = Array(args[(i + 1)...].prefix { !$0.hasPrefix("--") })
+            if rest.first == "submit" {
+                guard rest.count > 1 else { print("usage: --market submit FILE|ID [--notes TEXT] [--wait] [--dry-run] [--force]"); return 2 }
+                return MarketSubmit.run(target: rest[1], notes: value("--notes"), wait: args.contains("--wait"),
+                                        dryRun: args.contains("--dry-run"), force: args.contains("--force"))
+            }
             return MainActor.assumeIsolated { market(rest) }
 
         case "--validate":
@@ -324,7 +330,7 @@ enum DevTools {
             print("installed \(item.entry.id) → \(Paths.marketEffects.path)")
             return 0
         default:
-            print("usage: --market [list | update | install ID | uninstall ID]")
+            print("usage: --market [list | update | install ID | uninstall ID | submit FILE|ID]")
             return 2
         }
     }

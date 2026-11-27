@@ -83,16 +83,30 @@ struct MarketPane: View {
     }
 }
 
-/// How to share your own effect.
+/// Sharing your own effect is a job for a coding agent: it runs `Exit --market submit`.
 private struct SubmitHint: View {
-    @EnvironmentObject var nav: SettingsNavigation
+    @State private var copied = false
+
+    private var prompt: String {
+        T("Submit one of my Exit effects to the Exit effect market. Follow the guide at \(MarketSubmit.guide.absoluteString). My effects are in ~/Library/Application Support/Exit/Effects/; ask me which one if it isn’t clear.",
+          "帮我把一个 Exit 特效投稿到 Exit 特效市场，按这份指南来：\(MarketSubmit.guide.absoluteString)。我的特效在 ~/Library/Application Support/Exit/Effects/ 里，不确定是哪个就问我。")
+    }
 
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "square.and.arrow.up").foregroundStyle(.secondary)
-            Text(T("Made one you like? Submit it from its card in Effects.", "做了满意的特效？在“特效”页它的卡片上点投稿。"))
+            Text(T("Made one you like? Ask your coding agent to submit it.", "做了满意的特效？让你的 coding agent 帮你投稿。"))
                 .foregroundStyle(.secondary)
-            Button(T("Go to Effects", "去特效页")) { nav.tab = .effects }.buttonStyle(.link)
+            Button(copied ? T("Copied", "已复制") : T("Copy Prompt", "复制提示词")) {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(prompt, forType: .string)
+                copied = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copied = false }
+            }
+            .buttonStyle(.link)
+            .help(T("Copies a request you can paste into Claude Code, Codex or another agent.",
+                    "复制一段请求，粘贴给 Claude Code、Codex 等 agent 即可。"))
+            Button(T("Guide", "指南")) { NSWorkspace.shared.open(MarketSubmit.guide) }.buttonStyle(.link)
             Spacer()
         }
         .font(.callout)

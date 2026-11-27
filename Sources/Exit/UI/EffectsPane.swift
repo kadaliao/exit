@@ -100,8 +100,6 @@ struct EffectCard: View {
                 Button { NSWorkspace.shared.activateFileViewerSelecting([effect.url]) } label: { Image(systemName: "folder") }
                     .help(T("Show in Finder", "在访达中显示"))
                 if effect.origin == .user {
-                    Button { MarketSubmit.submit(effect) } label: { Image(systemName: "square.and.arrow.up") }
-                        .help(T("Submit to the market…", "投稿到特效市场…")).disabled(!effect.isReady)
                     Button { trash() } label: { Image(systemName: "trash") }.help(T("Move to Trash", "移到废纸篓"))
                 } else if effect.origin == .market {
                     Button { MarketStore.shared.uninstall(id: effect.id) } label: { Image(systemName: "trash") }

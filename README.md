@@ -119,8 +119,9 @@ entrance too.
 - **An effect market.** Settings → Market lists effects made by other Exit users
   ([browse them on the web](https://kadaliao.github.io/exit-effects/)). Try one on screen,
   install it, and it stays up to date; or subscribe and new effects arrive by themselves.
-  Made one you like? Click **Submit** on its card: a bot checks it, renders a preview and
-  opens a pull request on [exit-effects](https://github.com/kadaliao/exit-effects).
+  Made one you like? Ask your coding agent to submit it: `Exit --market submit` checks it
+  and sends it to [exit-effects](https://github.com/kadaliao/exit-effects), where a bot
+  renders a preview and opens a pull request ([guide for agents](https://github.com/kadaliao/exit-effects/blob/main/AGENTS.md)).
 - **Describe an effect, get an effect.** Type "the window pops like a balloon" and an AI
   model writes the shader. Exit compiles it, renders test frames to check it starts
   seamlessly, ends cleanly and runs fast, sends any problems back to the model, and plays
@@ -187,6 +188,7 @@ Exit.app/Contents/MacOS/Exit --validate --only my-effect   # seamless start, cle
 Exit.app/Contents/MacOS/Exit --render-sheet out.png --only my-effect
 Exit.app/Contents/MacOS/Exit --bench
 Exit.app/Contents/MacOS/Exit --market list                 # also: install ID, uninstall ID
+Exit.app/Contents/MacOS/Exit --market submit my-effect --wait   # send it to the market (needs gh)
 ```
 
 Add `--effects-dir DIR` to test the files in a folder without your own effects in the way.
