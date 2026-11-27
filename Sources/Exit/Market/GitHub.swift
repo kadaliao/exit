@@ -197,6 +197,28 @@ struct GitHubAPI {
         try await call("GET", "/repos/\(repo)/issues/\(number)/comments?per_page=100")
     }
 
+    /// Whether a merged pull request closed issue `number` ("Closes #n" in its description). A closed
+    /// issue alone doesn't say whether the effect was taken or turned down.
+    func closedByMerge(_ repo: String, _ number: Int) async throws -> Bool {
+        let events: [TimelineEvent] = try await call("GET", "/repos/\(repo)/issues/\(number)/timeline?per_page=100")
+        let closing = "(?i)\\b(close[sd]?|fix(e[sd])?|resolve[sd]?):? +#\(number)\\b"
+        return events.contains { e in
+            guard e.event == "cross-referenced", let pr = e.source?.issue, pr.pullRequest?.mergedAt != nil else { return false }
+            return pr.body?.range(of: closing, options: .regularExpression) != nil
+        }
+    }
+
+    private struct TimelineEvent: Decodable {
+        struct Source: Decodable { let issue: Ref? }
+        struct Ref: Decodable {
+            let body: String?
+            let pullRequest: PullRequest?
+        }
+        struct PullRequest: Decodable { let mergedAt: Date? }
+        let event: String?
+        let source: Source?
+    }
+
     private func call<T: Decodable>(_ method: String, _ path: String, _ body: [String: String]? = nil) async throws -> T {
         var req = URLRequest(url: URL(string: "https://api.github.com" + path)!, timeoutInterval: 30)
         req.httpMethod = method

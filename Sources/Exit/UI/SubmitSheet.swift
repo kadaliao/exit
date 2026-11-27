@@ -275,7 +275,6 @@ struct SubmitSheet: View {
 struct SubmissionStatusView: View {
     let record: SubmissionCenter.Record
     var large = false
-    @ObservedObject private var center = SubmissionCenter.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -317,7 +316,8 @@ struct SubmissionStatusView: View {
         case .checking: ProgressView().controlSize(large ? .regular : .small)
         case .accepted: Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
         case .needsChanges: Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange)
-        case .closed: Image(systemName: center.isPublished(record) ? "storefront.fill" : "archivebox").foregroundStyle(.secondary)
+        case .merged: Image(systemName: "storefront.fill").foregroundStyle(.green)
+        case .declined: Image(systemName: "archivebox").foregroundStyle(.secondary)
         }
     }
 
@@ -326,7 +326,8 @@ struct SubmissionStatusView: View {
         case .checking: T("Sent. The market's bot is checking it…", "已发送，特效市场的机器人正在检查…")
         case .accepted: T("Checks passed, waiting for review", "检查通过，等待审核")
         case .needsChanges: T("Needs changes", "需要修改")
-        case .closed: center.isPublished(record) ? T("In the market", "已上架") : T("Closed", "已关闭")
+        case .merged: T("In the market", "已上架")
+        case .declined: T("Not accepted", "未收录")
         }
     }
 
@@ -341,9 +342,12 @@ struct SubmissionStatusView: View {
         case .needsChanges:
             T("Fix what's marked below in the file, then press Submit again: it updates the same submission.",
               "按下面标出的问题改好文件，再点一次「投稿」，会更新同一份投稿。")
-        case .closed:
-            center.isPublished(record) ? T("It's live: everyone can install it from the Market.", "已经上线，所有人都能在特效市场里安装。")
-                : T("The submission was closed without being merged. The issue on GitHub says why.", "投稿已关闭、没有合并，原因见 GitHub 上的 issue。")
+        case .merged:
+            T("Merged: everyone can install it from the Market. Right after a merge it takes a few minutes to show up there.",
+              "已合并，所有人都能在特效市场里安装它。刚合并时要过几分钟才会出现在市场里。")
+        case .declined:
+            T("The submission was closed without being merged. The issue on GitHub says why.",
+              "投稿没有合并就关闭了，原因见 GitHub 上的 issue。")
         }
     }
 }

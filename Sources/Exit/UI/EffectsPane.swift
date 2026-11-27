@@ -138,15 +138,14 @@ struct EffectCard: View {
 struct SubmissionChip: View {
     let record: SubmissionCenter.Record
     let action: () -> Void
-    @ObservedObject private var center = SubmissionCenter.shared
 
     var body: some View {
         let (text, symbol, color): (String, String, Color) = switch record.status {
         case .checking: (T("Checking…", "检查中…"), "hourglass", .gray)
         case .accepted: (T("In review", "审核中"), "checkmark.seal.fill", .blue)
         case .needsChanges: (T("Needs changes", "需要修改"), "exclamationmark.circle.fill", .orange)
-        case .closed: center.isPublished(record) ? (T("In the market", "已上架"), "storefront.fill", .green)
-                                                 : (T("Closed", "已关闭"), "archivebox.fill", .gray)
+        case .merged: (T("In the market", "已上架"), "storefront.fill", .green)
+        case .declined: (T("Not accepted", "未收录"), "archivebox.fill", .gray)
         }
         Button(action: action) {
             Label(text, systemImage: symbol)

@@ -191,7 +191,8 @@ enum DevTools {
                                  styleMask: [.titled, .fullSizeContentView], backing: .buffered, defer: false)
                 w.contentView = host
                 w.orderFrontRegardless()
-                RunLoop.main.run(until: Date().addingTimeInterval(0.8))
+                // --wait N: longer, e.g. for the Effects pane to hear back about submissions.
+                RunLoop.main.run(until: Date().addingTimeInterval(Double(value("--wait") ?? "") ?? 0.8))
                 if tab == .market {   // wait for the index and the previews
                     let store = MainActor.assumeIsolated { MarketStore.shared }
                     let deadline = Date().addingTimeInterval(15)

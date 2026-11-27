@@ -23,8 +23,18 @@ final class SubmissionCenter: ObservableObject {
         /// The bot's checks passed; the maintainer reviews the pull request.
         case accepted
         case needsChanges
-        /// The issue is closed: merged into the market, or turned down.
-        case closed
+        /// The pull request was merged: the effect is in the market.
+        case merged
+        /// The issue was closed without a merge: turned down, or withdrawn.
+        case declined
+
+        /// Exit 0.4.0 saved "closed" for both endings. Reading it as `accepted` makes Exit ask GitHub
+        /// again which one it was.
+        init(from decoder: Decoder) throws {
+            self = Status(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .accepted
+        }
+
+        var isFinal: Bool { self == .merged || self == .declined }
     }
 
     struct Record: Codable, Equatable {
@@ -72,11 +82,6 @@ final class SubmissionCenter: ObservableObject {
     }
 
     func record(for effectID: String) -> Record? { records[effectID] }
-
-    /// Merged: the issue is closed and the market lists the effect.
-    func isPublished(_ r: Record) -> Bool {
-        r.status == .closed && MarketStore.shared.items.contains { $0.source.isOfficial && $0.entry.id == r.marketID }
-    }
 
     // MARK: Account
 
@@ -184,8 +189,9 @@ final class SubmissionCenter: ObservableObject {
             updated.status = reply.passed ? .accepted : .needsChanges
             updated.report = reply.body
         }
-        if updated.status != .checking, let issue = try? await api.issue(MarketSubmit.repo, r.number), issue.state == "closed" {
-            updated.status = .closed
+        if updated.status != .checking, let issue = try? await api.issue(MarketSubmit.repo, r.number), issue.state == "closed",
+           let merged = try? await api.closedByMerge(MarketSubmit.repo, r.number) {
+            updated.status = merged ? .merged : .declined
         }
         // Another submission may have replaced this one meanwhile.
         guard records[effectID]?.number == r.number, records[effectID]?.sentAt == r.sentAt, updated != r else { return }
@@ -198,7 +204,7 @@ final class SubmissionCenter: ObservableObject {
     func refreshStatuses() {
         if let lastStatusRefresh, Date().timeIntervalSince(lastStatusRefresh) < 300 { return }
         lastStatusRefresh = Date()
-        for (id, r) in records where r.status != .closed && watchers[id] == nil {
+        for (id, r) in records where !r.status.isFinal && watchers[id] == nil {
             if r.status == .checking && Date().timeIntervalSince(r.sentAt) < Self.watchFor {
                 watch(id)
             } else if Date().timeIntervalSince(r.sentAt) < 60 * 86400 {
