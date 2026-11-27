@@ -1,0 +1,42 @@
+# Publishes the website (site/) to GitHub Pages at https://kadaliao.github.io/exit/, with its
+# download buttons pointing at the newest release's DMG. Runs when the site changes and
+# whenever a release is published, so the buttons follow every new version.
+name: Site
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", "scripts/build-site.sh", ".github/workflows/site.yml"]
+  release:
+    types: [published]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # A release can be published a moment before its DMG finishes uploading.
+        run: |
+          for i in 1 2 3 4 5 6; do
+            scripts/build-site.sh _site && exit 0
+            sleep 30
+          done
+          exit 1
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

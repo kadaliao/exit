@@ -4,6 +4,8 @@
 在它原来的位置播放一段 GPU 动画——碎成玻璃、烧成灰烬、融化滴落、像贴纸一样被撕下、
 被光标吸走，或者化成尘埃。窗口打开时也可以有登场效果。
 
+**官网：[kadaliao.github.io/exit](https://kadaliao.github.io/exit/)** · [English](README.md)
+
 ## 亮点
 
 - **14 个内置特效**，Metal 渲染，跟随屏幕刷新率：老电视、像素消散、字符矩阵、故障、燃烧、
@@ -137,7 +139,7 @@
 brew install --cask kadaliao/tap/exit
 ```
 
-也可以在 [Releases](https://github.com/kadaliao/exit/releases/latest) 下载 DMG。
+也可以在[官网](https://kadaliao.github.io/exit/#download)或 [Releases](https://github.com/kadaliao/exit/releases/latest) 下载 DMG。
 
 或者自己编译：
 

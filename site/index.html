@@ -1,0 +1,877 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Exit — Give every window a proper exit</title>
+<meta name="description" content="Exit is a free, open-source Mac app that plays a GPU animation right where a window closes: it shatters, burns, melts, peels off like a sticker or turns to dust. Write your own effects, or describe one and let AI write it.">
+<meta name="theme-color" content="#000000">
+<meta name="color-scheme" content="dark">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Exit — Give every window a proper exit">
+<meta property="og:description" content="A free, open-source Mac app that animates every window you close. 14 Metal effects, the true last frame, effects as files, and AI that writes new ones.">
+<meta property="og:url" content="https://kadaliao.github.io/exit/">
+<meta property="og:image" content="https://kadaliao.github.io/exit/og.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="https://kadaliao.github.io/exit/">
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<style>
+:root {
+  color-scheme: dark;
+  --ink: #000;
+  --graphite: #161617;
+  --graphite-2: #232326;
+  --mist: #f5f5f7;
+  --slate: #86868b;
+  --hair: rgba(255, 255, 255, .14);
+  --link: #2997ff;
+  --green: #63d47a;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --gutter: max(22px, env(safe-area-inset-left));
+  --wide: 1180px;
+  --dusk: linear-gradient(135deg, #3d5c8c, #785285);
+  --aurora: linear-gradient(90deg, #8fb3ff, #b79cff 50%, #f39bd6);
+}
+* { box-sizing: border-box; }
+html { background: var(--ink); scroll-behavior: smooth; scroll-padding-top: 64px; }
+body {
+  margin: 0; background: var(--ink); color: var(--mist);
+  font: 17px/1.47 var(--font); letter-spacing: -.022em;
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+html:lang(zh-CN) body { letter-spacing: 0; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+button { font: inherit; color: inherit; letter-spacing: inherit; }
+:focus-visible { outline: 2px solid var(--link); outline-offset: 3px; border-radius: 8px; }
+.wrap { width: min(var(--wide), 100% - 2 * var(--gutter)); margin: 0 auto; }
+[hidden] { display: none !important; }
+code, pre { font-family: var(--mono); letter-spacing: 0; }
+.more::after { content: " ›"; }
+
+/* Navigation */
+.nav {
+  position: sticky; top: 0; z-index: 20; height: 52px;
+  background: rgba(0, 0, 0, .72); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+.nav .wrap { height: 100%; display: flex; align-items: center; gap: 28px; }
+.brand { display: flex; align-items: center; gap: 9px; color: var(--mist); font-weight: 600; font-size: 17px; letter-spacing: -.01em; }
+.brand:hover { text-decoration: none; }
+.brand img { width: 26px; height: 26px; }
+.nav .links { display: flex; gap: 26px; margin-left: auto; font-size: 13px; letter-spacing: -.01em; }
+.nav .links a, .nav .links button { color: rgba(245, 245, 247, .8); background: none; border: 0; padding: 0; cursor: pointer; }
+.nav .links a:hover, .nav .links button:hover { color: var(--mist); text-decoration: none; }
+.pill {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 44px; padding: 0 22px; border-radius: 980px; border: 0; cursor: pointer;
+  background: var(--mist); color: #000; font-size: 17px; font-weight: 500; letter-spacing: -.02em;
+  transition: background-color .2s, transform .2s;
+}
+.pill:hover { background: #fff; text-decoration: none; }
+.pill:active { transform: scale(.98); }
+.pill svg { width: 17px; height: 17px; fill: currentColor; flex: none; }
+.pill.big { min-height: 54px; padding: 0 30px; font-size: 19px; }
+.pill.small { min-height: 28px; padding: 0 14px; font-size: 13px; letter-spacing: -.01em; }
+
+/* Hero */
+.hero { position: relative; padding: clamp(40px, 5.5vw, 72px) 0 0; text-align: center; isolation: isolate; overflow-x: clip; }
+.hero::before {
+  content: ""; position: absolute; z-index: -1; left: 50%; top: 40%; width: min(1500px, 140vw); aspect-ratio: 1.5;
+  transform: translateX(-50%);
+  background:
+    radial-gradient(closest-side at 38% 46%, rgba(61, 92, 140, .55), transparent),
+    radial-gradient(closest-side at 64% 58%, rgba(120, 82, 133, .5), transparent);
+  filter: blur(40px); pointer-events: none;
+}
+.appicon { width: 92px; height: 92px; display: block; margin: 0 auto 22px; filter: drop-shadow(0 18px 40px rgba(120, 82, 200, .45)); }
+h1 {
+  margin: 0 auto; font-size: clamp(44px, 7.4vw, 92px); line-height: 1.04; font-weight: 700; letter-spacing: -.045em;
+}
+h1 em { font-style: normal; background: var(--aurora); -webkit-background-clip: text; background-clip: text; color: transparent; }
+html:lang(zh-CN) h1 { letter-spacing: -.01em; font-size: clamp(36px, 7vw, 84px); line-height: 1.14; }
+.lede { margin: 24px auto 0; max-width: 33em; color: var(--slate); font-size: clamp(19px, 2vw, 23px); line-height: 1.4; letter-spacing: -.02em; }
+.lede b { color: var(--mist); font-weight: 600; }
+.cta { display: flex; gap: 28px; align-items: center; justify-content: center; margin-top: 32px; flex-wrap: wrap; font-size: 19px; }
+.meta { margin: 16px 0 0; color: var(--slate); font-size: 14px; letter-spacing: -.01em; }
+.brew {
+  display: inline-flex; align-items: center; gap: 12px; margin-top: 18px; max-width: 100%;
+  padding: 8px 8px 8px 16px; border-radius: 14px; background: rgba(35, 35, 38, .8); border: 1px solid rgba(255, 255, 255, .08);
+}
+.brew code { font-size: 14px; color: var(--mist); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.brew code::before { content: "$ "; color: var(--slate); }
+.copy {
+  flex: none; border: 0; cursor: pointer; border-radius: 8px; padding: 5px 11px; font-size: 13px;
+  background: rgba(255, 255, 255, .1); color: var(--mist);
+}
+.copy:hover { background: rgba(255, 255, 255, .16); }
+.copy.done { color: var(--green); }
+
+/* The stage */
+.stage-wrap { margin: clamp(40px, 5vw, 60px) auto 0; width: min(1100px, 100% - 2 * var(--gutter)); }
+.stage {
+  position: relative; aspect-ratio: 16 / 10; border-radius: clamp(14px, 2vw, 26px); overflow: hidden;
+  background: var(--dusk);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .12), 0 40px 120px -20px rgba(70, 60, 140, .55);
+}
+.stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .45s ease; }
+.stage video.on { opacity: 1; }
+.stage .toggle {
+  position: absolute; right: 16px; bottom: 16px; width: 36px; height: 36px; border-radius: 50%; border: 0; cursor: pointer;
+  display: grid; place-items: center; background: rgba(0, 0, 0, .32); color: #fff;
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+}
+.stage .toggle:hover { background: rgba(0, 0, 0, .5); }
+.stage .toggle svg { width: 14px; height: 14px; fill: currentColor; }
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .stage { animation: rise linear both; animation-timeline: view(); animation-range: entry 0% cover 45%; }
+    @keyframes rise { from { transform: scale(.9); } to { transform: none; } }
+  }
+}
+.caption { display: grid; justify-items: center; gap: 4px; margin-top: 28px; min-height: 76px; text-align: center; padding: 0 var(--gutter); }
+.caption .name { font-size: 28px; font-weight: 600; letter-spacing: -.03em; }
+html:lang(zh-CN) .caption .name { letter-spacing: 0; }
+.caption .desc { color: rgba(245, 245, 247, .78); max-width: 34em; }
+.caption > * { transition: opacity .3s; }
+.caption.swap > * { opacity: 0; }
+.reel { display: flex; justify-content: center; gap: 10px; margin: 20px auto 0; flex-wrap: wrap; padding: 0 var(--gutter); }
+.reel button {
+  position: relative; overflow: hidden; border: 0; cursor: pointer; isolation: isolate;
+  padding: 8px 18px; border-radius: 980px; background: var(--graphite-2); color: rgba(245, 245, 247, .72);
+  font-size: 14px; letter-spacing: -.01em;
+}
+.reel button:hover, .reel button[aria-current="true"] { color: var(--mist); }
+.reel button::after {
+  content: ""; position: absolute; inset: 0; transform-origin: left; transform: scaleX(var(--p, 0));
+  background: linear-gradient(90deg, rgba(61, 92, 140, .9), rgba(120, 82, 133, .9)); z-index: -1;
+}
+.reel button:not([aria-current="true"])::after { transform: scaleX(0); }
+
+/* Sections */
+section.block { padding: clamp(110px, 14vw, 180px) 0 0; }
+.kicker { display: block; margin: 0 0 12px; font-size: 17px; font-weight: 600; letter-spacing: -.01em; background: var(--aurora); -webkit-background-clip: text; background-clip: text; color: transparent; width: fit-content; }
+h2 { margin: 0; font-size: clamp(40px, 5.6vw, 64px); line-height: 1.06; font-weight: 700; letter-spacing: -.04em; }
+html:lang(zh-CN) h2 { letter-spacing: 0; line-height: 1.15; }
+.head { display: flex; align-items: end; gap: 24px; flex-wrap: wrap; justify-content: space-between; margin-bottom: 48px; }
+.head p, .sub { margin: 14px 0 0; color: var(--slate); font-size: 21px; line-height: 1.4; letter-spacing: -.02em; max-width: 36em; }
+.seg { display: inline-flex; padding: 3px; border-radius: 980px; background: var(--graphite-2); }
+.seg button { border: 0; background: none; padding: 7px 18px; border-radius: 980px; font-size: 14px; color: rgba(245, 245, 247, .72); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--mist); color: #000; }
+
+/* Effect gallery */
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 52px 28px; }
+.fx { display: block; color: inherit; text-align: left; background: none; border: 0; padding: 0; cursor: default; width: 100%; }
+.fx .media { position: relative; aspect-ratio: 4 / 3; border-radius: 18px; overflow: hidden; background: var(--dusk); box-shadow: 0 0 0 1px rgba(255, 255, 255, .08); }
+.fx .media video, .fx .media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; transform: scale(1.22); }
+.fx .media img { transition: opacity .25s; }
+.fx.playing .media img { opacity: 0; }
+.fx .tag { position: absolute; left: 12px; top: 12px; padding: 3px 10px; border-radius: 980px; font-size: 12px; background: rgba(0, 0, 0, .35); color: #fff; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.fx h3 { margin: 18px 0 0; font-size: 24px; line-height: 1.17; font-weight: 600; letter-spacing: -.03em; }
+html:lang(zh-CN) .fx h3 { letter-spacing: 0; }
+.fx p { margin: 6px 0 0; color: rgba(245, 245, 247, .78); font-size: 15px; line-height: 1.47; letter-spacing: -.01em; }
+.hint { margin: 48px 0 0; color: var(--slate); font-size: 15px; }
+
+/* The last frame */
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(36px, 6vw, 88px); align-items: center; }
+.timeline { list-style: none; margin: 0; padding: 34px; border-radius: 28px; background: var(--graphite); box-shadow: 0 0 0 1px rgba(255, 255, 255, .08), 0 30px 80px -30px rgba(120, 82, 133, .5); display: grid; gap: 0; }
+.timeline li { position: relative; display: grid; grid-template-columns: 44px 1fr; gap: 16px; padding-bottom: 26px; }
+.timeline li:last-child { padding-bottom: 0; }
+.timeline li:not(:last-child)::before { content: ""; position: absolute; left: 21px; top: 44px; bottom: 0; width: 2px; background: linear-gradient(#3d5c8c, #785285); opacity: .6; }
+.timeline .dot { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--graphite-2); font-size: 15px; font-weight: 600; color: var(--mist); }
+.timeline li:nth-child(2) .dot { background: var(--dusk); }
+.timeline li:last-child .dot { background: linear-gradient(135deg, #8fb3ff, #f39bd6); color: #000; }
+.timeline b { display: block; font-size: 19px; font-weight: 600; letter-spacing: -.02em; padding-top: 9px; }
+.timeline span { color: var(--slate); font-size: 15px; }
+kbd { font: 600 14px var(--font); padding: 1px 7px; border-radius: 6px; background: var(--graphite-2); box-shadow: inset 0 -1px 0 rgba(255, 255, 255, .12); color: var(--mist); }
+.timeline .dot kbd { background: none; box-shadow: none; padding: 0; font-size: 15px; }
+
+/* Feature tiles */
+.bento { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
+.tile { position: relative; overflow: hidden; border-radius: 28px; background: var(--graphite); padding: clamp(28px, 3.4vw, 44px); display: flex; flex-direction: column; }
+.tile.wide { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1.05fr; gap: clamp(28px, 4vw, 56px); align-items: center; }
+.tile h3 { margin: 0; font-size: clamp(26px, 2.8vw, 32px); line-height: 1.15; font-weight: 700; letter-spacing: -.03em; }
+html:lang(zh-CN) .tile h3 { letter-spacing: 0; }
+.tile .kicker { font-size: 15px; margin-bottom: 10px; }
+.tile p { margin: 14px 0 0; color: var(--slate); line-height: 1.47; }
+.tile .art { margin-top: 30px; }
+.tile .foot { margin-top: auto; padding-top: 22px; font-size: 15px; }
+
+.rows { border-radius: 16px; background: var(--graphite-2); padding: 6px 0; }
+.rows div { display: flex; align-items: center; gap: 12px; padding: 11px 16px; font-size: 15px; }
+.rows div + div { border-top: 1px solid rgba(255, 255, 255, .06); }
+.rows svg { width: 18px; height: 18px; flex: none; fill: none; stroke: var(--slate); stroke-width: 1.6; }
+.rows .v { margin-left: auto; color: var(--slate); display: flex; align-items: center; gap: 6px; }
+.rows .v::after { content: ""; width: 7px; height: 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg) translateY(-3px); opacity: .8; }
+.rows .v.on { color: var(--mist); }
+
+.code { border-radius: 16px; background: #0c0c0d; box-shadow: 0 0 0 1px rgba(255, 255, 255, .07); overflow: hidden; }
+.code .bar { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid rgba(255, 255, 255, .06); font-size: 12px; color: var(--slate); }
+.code .bar i { width: 11px; height: 11px; border-radius: 50%; background: #3a3a3e; }
+.code .bar span { margin-left: 8px; }
+.code .bar em { margin-left: auto; font-style: normal; color: var(--green); }
+.code pre { margin: 0; padding: 16px 18px 18px; font-size: 12.5px; line-height: 1.7; color: rgba(245, 245, 247, .86); overflow-x: auto; }
+.code .c { color: #7f8c98; } .code .k { color: #fc5fa3; } .code .t { color: #5dd8ff; } .code .f { color: #67b7a4; } .code .n { color: #d0bf69; }
+
+.agent { border-radius: 20px; background: var(--graphite-2); padding: 22px; }
+.agent .ask { display: flex; justify-content: flex-end; }
+.agent .ask span { background: #2f5fd0; color: #fff; padding: 9px 14px; border-radius: 18px 18px 4px 18px; font-size: 15px; letter-spacing: -.01em; max-width: 90%; }
+.agent ul { list-style: none; margin: 18px 0 0; padding: 0; display: grid; gap: 9px; font-size: 15px; }
+.agent li { display: flex; gap: 10px; align-items: baseline; color: rgba(245, 245, 247, .86); }
+.agent li::before { content: "✓"; color: var(--green); font-weight: 700; width: 14px; flex: none; }
+.agent li.play::before { content: "▶"; color: #b79cff; font-size: 12px; }
+.agent li.dim { color: var(--slate); }
+.agent li.dim::before { content: "·"; color: var(--slate); }
+.chips-label { margin: 24px 0 10px; font-size: 13px; color: var(--slate); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips span { padding: 5px 12px; border-radius: 980px; background: var(--graphite-2); font-size: 13px; color: rgba(245, 245, 247, .86); }
+
+.market-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.market-row a { color: inherit; }
+.market-row a:hover { text-decoration: none; }
+.market-row .media { position: relative; aspect-ratio: 4 / 3; border-radius: 14px; overflow: hidden; background: var(--dusk); }
+.market-row img, .market-row video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scale(1.22); }
+.market-row span { display: block; margin-top: 8px; font-size: 14px; color: rgba(245, 245, 247, .86); }
+.market-row small { color: var(--slate); font-size: 12px; }
+
+/* Privacy */
+.perms { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.perm { border-top: 1px solid var(--hair); padding-top: 26px; }
+.perm h3 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -.02em; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.badge { font-size: 12px; font-weight: 500; padding: 3px 10px; border-radius: 980px; background: var(--graphite-2); color: var(--slate); letter-spacing: 0; }
+.badge.req { color: var(--mist); }
+.perm p { margin: 10px 0 0; color: var(--slate); }
+.net { margin: 48px 0 0; padding: 28px 32px; border-radius: 22px; background: var(--graphite); color: var(--slate); }
+.net b { color: var(--mist); font-weight: 600; }
+
+/* Download */
+.get { display: grid; grid-template-columns: 1.2fr 1fr 1fr; border-top: 1px solid var(--hair); }
+.get > div { padding: 30px 30px 0 0; }
+.get > div, .bento > *, .tile > *, .split > * { min-width: 0; }
+.get > div + div { padding-left: 30px; border-left: 1px solid var(--hair); }
+.get h3 { margin: 0 0 10px; font-size: 21px; font-weight: 600; letter-spacing: -.02em; }
+.get p { margin: 12px 0 0; color: var(--slate); font-size: 15px; }
+.get .brew { margin-top: 4px; width: 100%; justify-content: space-between; }
+.get .brew code { font-size: 13px; }
+.get pre { margin: 4px 0 0; padding: 14px 16px; border-radius: 14px; background: var(--graphite); font-size: 13px; line-height: 1.6; color: rgba(245, 245, 247, .86); overflow-x: auto; }
+.steps { list-style: none; margin: 64px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; counter-reset: step; }
+.steps li { display: grid; grid-template-columns: 34px 1fr; gap: 14px; counter-increment: step; }
+.steps li::before { content: counter(step); width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 14px; font-weight: 600; background: var(--graphite-2); }
+.steps b { display: block; font-weight: 600; }
+.steps span { color: var(--slate); font-size: 15px; }
+.reqs { margin: 40px 0 0; color: var(--slate); font-size: 15px; }
+
+/* Closing call */
+.outro { text-align: center; padding-top: clamp(120px, 15vw, 200px); }
+.outro h2 { font-size: clamp(44px, 7vw, 80px); }
+.outro h2 em { font-style: normal; background: var(--aurora); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.outro .cta { margin-top: 32px; }
+
+footer { margin-top: clamp(110px, 14vw, 180px); padding: 22px 0 40px; border-top: 1px solid rgba(255, 255, 255, .1); color: var(--slate); font-size: 12px; letter-spacing: -.01em; }
+footer .wrap { display: flex; gap: 22px; flex-wrap: wrap; }
+footer .wrap > :first-child { margin-right: auto; }
+footer a { color: rgba(245, 245, 247, .8); }
+
+@media (max-width: 1068px) {
+  .grid { grid-template-columns: repeat(2, 1fr); }
+  .split, .tile.wide { grid-template-columns: 1fr; }
+  .get { grid-template-columns: 1fr; }
+  .get > div, .get > div + div { padding: 26px 0; border-left: 0; }
+  .get > div + div { border-top: 1px solid var(--hair); }
+}
+@media (max-width: 834px) {
+  .bento, .perms { grid-template-columns: 1fr; }
+  .steps { grid-template-columns: 1fr; }
+}
+@media (max-width: 734px) {
+  body { font-size: 16px; }
+  .nav .links a:not(.keep) { display: none; }
+  .grid { grid-template-columns: 1fr; gap: 44px; }
+  .stage { aspect-ratio: 4 / 3; }
+  .stage video { transform: scale(1.2); }
+  .stage-wrap { width: 100%; padding: 0 12px; }
+  .appicon { width: 84px; height: 84px; }
+  .timeline { padding: 24px; }
+  .market-row { grid-template-columns: repeat(2, 1fr); }
+  .market-row a:nth-child(3) { display: none; }
+  .net { padding: 22px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .stage video, .caption > *, .pill { transition: none; animation: none; }
+}
+</style>
+</head>
+<body>
+<nav class="nav" aria-label="Main">
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="icon.png" alt=""><span>Exit</span></a>
+    <div class="links">
+      <a href="#effects" data-i18n="navEffects">Effects</a>
+      <a href="#features" data-i18n="navFeatures">Features</a>
+      <a href="#privacy" data-i18n="navPrivacy">Privacy</a>
+      <a href="https://kadaliao.github.io/exit-effects/" data-i18n="navMarket">Market</a>
+      <a href="https://github.com/kadaliao/exit">GitHub</a>
+      <button type="button" id="lang" class="keep" lang="zh-CN">中文</button>
+    </div>
+    <a class="pill small" href="#download" data-i18n="navDownload">Download</a>
+  </div>
+</nav>
+
+<main id="top">
+  <header class="hero">
+    <div class="wrap">
+      <img class="appicon" src="icon.png" alt="" width="92" height="92">
+      <h1 data-i18n-html="headline">Give every window<br><em>a proper exit.</em></h1>
+      <p class="lede" data-i18n-html="lede">Exit is a free, open-source Mac app that plays a GPU animation right where a window closes. It shatters, burns, melts, peels off like a sticker, or turns to dust.</p>
+      <div class="cta">
+        <a class="pill big dmg" href="__DMG_URL__"><svg viewBox="0 0 17 17" aria-hidden="true"><path d="M8.5 1.2a.9.9 0 0 1 .9.9v7.6l2.6-2.6a.9.9 0 1 1 1.3 1.3l-4.15 4.15a.9.9 0 0 1-1.3 0L3.7 8.4A.9.9 0 1 1 5 7.1l2.6 2.6V2.1a.9.9 0 0 1 .9-.9zM2.5 14.1h12a.9.9 0 1 1 0 1.8h-12a.9.9 0 1 1 0-1.8z"/></svg><span data-i18n="download">Download for Mac</span></a>
+        <a class="more film" href="https://youtu.be/NLr_VB-BnDU" data-i18n="film">Watch the film</a>
+      </div>
+      <p class="meta" data-rel="meta"></p>
+      <div class="brew"><code>brew install --cask kadaliao/tap/exit</code><button class="copy" type="button" data-copy="brew install --cask kadaliao/tap/exit" data-i18n="copy">Copy</button></div>
+    </div>
+    <div class="stage-wrap">
+      <div class="stage" id="stage" role="img" aria-label="Effects playing on a demo window">
+        <button class="toggle" id="toggle" type="button" aria-label="Pause"></button>
+      </div>
+    </div>
+    <div class="caption" id="caption" aria-live="polite"><span class="name"></span><span class="desc"></span></div>
+    <div class="reel" id="reel" role="group" aria-label="Effects"></div>
+  </header>
+
+  <section class="block" id="effects">
+    <div class="wrap">
+      <div class="head">
+        <div>
+          <h2 data-i18n="fxTitle">Fourteen ways out.</h2>
+          <p data-i18n="fxLede">Twelve for leaving and two for arriving, each rendered with Metal at your display’s refresh rate.</p>
+        </div>
+        <div class="seg" id="filter" role="group">
+          <button type="button" data-f="all" aria-pressed="true" data-i18n="all">All</button>
+          <button type="button" data-f="close" aria-pressed="false" data-i18n="closing">Closing</button>
+          <button type="button" data-f="open" aria-pressed="false" data-i18n="opening">Opening</button>
+        </div>
+      </div>
+      <div class="grid" id="grid"></div>
+      <p class="hint" data-i18n-html="fxHint">Want more? <a href="https://kadaliao.github.io/exit-effects/">Browse the effect market</a>, or write your own.</p>
+    </div>
+  </section>
+
+  <section class="block" id="features">
+    <div class="wrap split">
+      <div>
+        <span class="kicker" data-i18n="lfKicker">The true last frame</span>
+        <h2 data-i18n="lfTitle">It starts from exactly what you saw.</h2>
+        <p class="sub" data-i18n-html="lfLede">Press <kbd>⌘W</kbd>, <kbd>⌘Q</kbd> or <kbd>⌘M</kbd>, or click a close button, and Exit holds the input for a few milliseconds, photographs the window as it is, then lets it go. No stale screenshot, no grey box.</p>
+      </div>
+      <ol class="timeline">
+        <li><span class="dot"><kbd>⌘W</kbd></span><div><b data-i18n="t1">You close a window</b><span data-i18n="t1d">Exit notices the shortcut or the click. Every other key passes straight through.</span></div></li>
+        <li><span class="dot">◉</span><div><b data-i18n="t2">Exit takes its picture</b><span data-i18n="t2d">The window, exactly as it looks this instant, held in memory only.</span></div></li>
+        <li><span class="dot">→</span><div><b data-i18n="t3">The window closes</b><span data-i18n="t3d">The keystroke goes on to the app. If the picture isn’t ready within 160 ms, it goes anyway.</span></div></li>
+        <li><span class="dot">✦</span><div><b data-i18n="t4">The effect plays</b><span data-i18n="t4d">Right where the window was, starting from that very frame.</span></div></li>
+      </ol>
+    </div>
+
+    <div class="wrap bento" style="margin-top: clamp(80px, 10vw, 128px)">
+      <article class="tile">
+        <span class="kicker" data-i18n="evKicker">More than closing</span>
+        <h3 data-i18n="evTitle">Every exit, and every entrance.</h3>
+        <p data-i18n="evText">Closing a window, quitting an app, opening a window and minimizing each get their own effect. Pick one, shuffle, or turn it off.</p>
+        <div class="art rows" id="rows"></div>
+      </article>
+
+      <article class="tile">
+        <span class="kicker" data-i18n="fiKicker">Effects are just files</span>
+        <h3 data-i18n="fiTitle">One Metal file. Save, and it’s live.</h3>
+        <p data-i18n="fiText">Each effect is a single shader in your Effects folder. Edit it and it recompiles the moment you save. Share it by sending the file.</p>
+        <div class="art code">
+          <div class="bar"><i></i><i></i><i></i><span>fade-away.metal</span><em data-i18n="saved">✓ Compiled</em></div>
+<pre><span class="c">// @name Fade Away</span>
+<span class="c">// @duration 0.35</span>
+<span class="c">// @events close, quit, minimize</span>
+
+<span class="t">float4</span> <span class="f">effect</span>(<span class="t">float2</span> p, <span class="k">constant</span> <span class="t">Exit</span>&amp; u, <span class="t">texture2d</span>&lt;<span class="t">float</span>&gt; tex) {
+    <span class="t">float</span> t = <span class="f">easeInCubic</span>(u.progress);
+    <span class="t">float2</span> c = <span class="f">windowCenter</span>(u);
+    <span class="t">float2</span> q = c + (p - c) / (<span class="n">1.0</span> - <span class="n">0.08</span> * t);
+    <span class="k">return</span> <span class="f">sampleWindow</span>(tex, u, q) * (<span class="n">1.0</span> - t);
+}</pre>
+        </div>
+        <a class="foot more" id="guide" href="https://github.com/kadaliao/exit/blob/main/docs/EFFECTS.md" data-i18n="fiGuide">Read the authoring guide</a>
+      </article>
+
+      <article class="tile wide">
+        <div>
+          <span class="kicker" data-i18n="aiKicker">Describe an effect, get an effect</span>
+          <h3 data-i18n="aiTitle">Say it in a sentence. AI writes the shader.</h3>
+          <p data-i18n="aiText">Exit compiles what the model writes and renders test frames to check that it starts seamlessly, ends cleanly and runs fast. It sends any problems back to the model, then plays the result on your screen.</p>
+          <p class="chips-label" data-i18n="aiCli">Use a coding CLI you’re already signed in to</p>
+          <div class="chips"><span>Claude Code</span><span>Codex</span><span>Gemini CLI</span><span>OpenCode</span><span>Pi</span></div>
+          <p class="chips-label" data-i18n="aiApi">Or your own API key</p>
+          <div class="chips" id="apis"></div>
+        </div>
+        <div class="agent" aria-hidden="true">
+          <div class="ask"><span data-i18n="aiAsk">The window pops like a balloon.</span></div>
+          <ul>
+            <li class="dim" data-i18n="aiS0">Writing the shader…</li>
+            <li data-i18n="aiS1">Compiles</li>
+            <li data-i18n="aiS2">Starts seamlessly from the window</li>
+            <li data-i18n="aiS3">Ends on a clean screen</li>
+            <li data-i18n="aiS4">Fast enough for every frame</li>
+            <li class="play" data-i18n="aiS5">Playing it on your screen</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="tile wide">
+        <div>
+          <span class="kicker" data-i18n="mkKicker">Effect market</span>
+          <h3 data-i18n="mkTitle">Effects made by other Exit users.</h3>
+          <p data-i18n="mkText">Try one on your screen, install it, and it stays up to date. Or subscribe, and new ones arrive by themselves. Made one you like? Press Submit and Exit sends it to the market from your GitHub account.</p>
+          <a class="foot more" href="https://kadaliao.github.io/exit-effects/" data-i18n="mkLink">Browse the market</a>
+        </div>
+        <div class="market-row" id="market"></div>
+      </article>
+
+      <article class="tile">
+        <span class="kicker" data-i18n="upKicker">Keeps itself up to date</span>
+        <h3 data-i18n="upTitle">New versions, installed while you’re away.</h3>
+        <p data-i18n="upText">Once a day Exit checks GitHub for a new release, downloads it in the background, verifies its signature and Apple notarization, and installs it when you step away from your Mac or quit Exit. Both steps can be switched off.</p>
+      </article>
+
+      <article class="tile">
+        <span class="kicker" data-i18n="qKicker">Stays out of the way</span>
+        <h3 data-i18n="qTitle">Never steals a click or your focus.</h3>
+        <p data-i18n="qText">Overlays are click-through and never activate. Exit works across displays, Spaces and full-screen apps, lets you exclude apps or small windows, and goes still when Reduce Motion is on.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="block" id="privacy">
+    <div class="wrap">
+      <div class="head"><div>
+        <span class="kicker" data-i18n="pvKicker">Privacy</span>
+        <h2 data-i18n="pvTitle">Your windows stay yours.</h2>
+        <p data-i18n="pvLede">Window pictures live in memory for a few seconds. They are never written to disk or sent anywhere.</p>
+      </div></div>
+      <div class="perms">
+        <div class="perm">
+          <h3><span data-i18n="p1">Accessibility</span><span class="badge req" data-i18n="required">Required</span></h3>
+          <p data-i18n="p1d">To notice windows opening, closing and minimizing, and to briefly hold ⌘W, ⌘Q, ⌘M and close-button clicks for the true last frame. Only those are examined; every other key passes straight through.</p>
+        </div>
+        <div class="perm">
+          <h3><span data-i18n="p2">Screen Recording</span><span class="badge" data-i18n="optional">Optional</span></h3>
+          <p data-i18n="p2d">So the animation starts from the window’s real picture. Without it, Exit animates a card with the app’s icon instead.</p>
+        </div>
+      </div>
+      <p class="net" data-i18n-html="net"><b>When Exit goes online.</b> Only when you generate an effect with AI, once a day to check for a new release, and for the effect market. Those requests download public files; nothing about you is sent. Submitting an effect posts a GitHub issue from your account, and only when you press Submit.</p>
+    </div>
+  </section>
+
+  <section class="block" id="download">
+    <div class="wrap">
+      <div class="head"><div>
+        <h2 data-i18n="dlTitle">Get Exit.</h2>
+        <p data-i18n="dlLede">Free and open source under the MIT license. No account, no trial, no catch.</p>
+      </div></div>
+      <div class="get">
+        <div>
+          <h3 data-i18n="g1">Download</h3>
+          <a class="pill dmg" href="__DMG_URL__"><svg viewBox="0 0 17 17" aria-hidden="true"><path d="M8.5 1.2a.9.9 0 0 1 .9.9v7.6l2.6-2.6a.9.9 0 1 1 1.3 1.3l-4.15 4.15a.9.9 0 0 1-1.3 0L3.7 8.4A.9.9 0 1 1 5 7.1l2.6 2.6V2.1a.9.9 0 0 1 .9-.9zM2.5 14.1h12a.9.9 0 1 1 0 1.8h-12a.9.9 0 1 1 0-1.8z"/></svg><span data-rel="button"></span></a>
+          <p data-rel="dmgNote"></p>
+          <p><a class="more" data-rel-href="notes" href="https://github.com/kadaliao/exit/releases/latest" data-i18n="notes">Release notes</a></p>
+        </div>
+        <div>
+          <h3>Homebrew</h3>
+          <div class="brew"><code>brew install --cask kadaliao/tap/exit</code><button class="copy" type="button" data-copy="brew install --cask kadaliao/tap/exit" data-i18n="copy">Copy</button></div>
+          <p data-i18n="g2">Exit keeps itself up to date either way.</p>
+        </div>
+        <div>
+          <h3 data-i18n="g3">Build it yourself</h3>
+<pre>git clone https://github.com/kadaliao/exit
+cd exit && scripts/build-app.sh
+open build/Exit.app</pre>
+          <p><a class="more" href="https://github.com/kadaliao/exit" data-i18n="g3l">View the source</a></p>
+        </div>
+      </div>
+      <ol class="steps">
+        <li><div><b data-i18n="s1t">Drag it to Applications</b><span data-i18n="s1">Open the disk image and drag Exit into the Applications folder.</span></div></li>
+        <li><div><b data-i18n="s2t">Open Exit</b><span data-i18n="s2">It lives in your menu bar. Settings is where you pick effects.</span></div></li>
+        <li><div><b data-i18n="s3t">Allow Accessibility</b><span data-i18n="s3">In System Settings → Privacy &amp; Security. Add Screen Recording for the real picture.</span></div></li>
+      </ol>
+      <p class="reqs" data-i18n="req">Requires macOS 14 Sonoma or later. Runs natively on Apple silicon and Intel Macs.</p>
+    </div>
+  </section>
+
+  <section class="outro">
+    <div class="wrap">
+      <h2 data-i18n-html="outro">Close something.<br><em>Beautifully.</em></h2>
+      <div class="cta">
+        <a class="pill big dmg" href="__DMG_URL__"><svg viewBox="0 0 17 17" aria-hidden="true"><path d="M8.5 1.2a.9.9 0 0 1 .9.9v7.6l2.6-2.6a.9.9 0 1 1 1.3 1.3l-4.15 4.15a.9.9 0 0 1-1.3 0L3.7 8.4A.9.9 0 1 1 5 7.1l2.6 2.6V2.1a.9.9 0 0 1 .9-.9zM2.5 14.1h12a.9.9 0 1 1 0 1.8h-12a.9.9 0 1 1 0-1.8z"/></svg><span data-i18n="download">Download for Mac</span></a>
+      </div>
+      <p class="meta" data-rel="meta"></p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span data-i18n="footer">Exit is free and open-source software under the MIT license.</span>
+    <a href="https://github.com/kadaliao/exit">GitHub</a>
+    <a href="https://github.com/kadaliao/exit/releases" data-i18n="footReleases">All releases</a>
+    <a href="https://kadaliao.github.io/exit-effects/" data-i18n="footMarket">Effect market</a>
+    <a id="guide2" href="https://github.com/kadaliao/exit/blob/main/docs/EFFECTS.md" data-i18n="footGuide">Authoring guide</a>
+  </div>
+</footer>
+
+<script>
+/* Filled in by scripts/build-site.sh from the latest GitHub release. */
+const REL = { version: "__VERSION__", dmg: "__DMG_URL__", mb: "__DMG_MB__", notes: "__RELEASE_URL__" };
+const HAVE_REL = !REL.version.startsWith("__");
+if (!HAVE_REL) { REL.dmg = REL.notes = "https://github.com/kadaliao/exit/releases/latest"; }
+const MARKET = "https://kadaliao.github.io/exit-effects/";
+
+const FX = [
+  ["oldtv", "Old TV", "老电视", "CRT power-off: collapses to a glowing line, then a dot.", "显像管关机：压成一道亮线，再缩成一个光点。"],
+  ["pixel-dissolve", "Pixel Dissolve", "像素消散", "The window crumbles into square pixels that lift off in a wave and float away.", "窗口碎成方块像素，像波浪一样一块块飘起、缩小、消散。"],
+  ["ascii", "ASCII", "字符矩阵", "The window turns into phosphor-green characters from the edges inward, then rains away column by column.", "窗口从四周向内变成荧光绿字符，再像字符雨一样一列列落下消失。"],
+  ["glitch", "Glitch", "故障", "Digital breakdown: RGB split, torn slices and noise bursts escalate until the signal drops.", "数字信号崩坏：RGB 分离、画面撕裂、噪点爆发越来越强，最后信号中断。"],
+  ["burn", "Burn", "燃烧", "A ragged line of embers eats the window, leaving a charred edge and rising sparks.", "一道参差的火线烧过窗口，留下焦黑的边缘和向上飘的火星。"],
+  ["black-hole", "Black Hole", "黑洞", "A singularity opens at the center, twists the window into a spiral and swallows it behind a glowing accretion ring.", "窗口中心裂开一个奇点，把窗口拧成漩涡吞进去，吸积环闪耀后坍缩消失。"],
+  ["dust", "Dust", "灰飞烟灭", "A sweep turns the window into fine dust that drifts up and away on the wind.", "窗口从一侧开始化成细小的灰烬，被风吹散、飘向远处。"],
+  ["shatter", "Shatter", "玻璃碎裂", "Cracks like glass from the click point; shards tumble and fall away.", "从点击处像玻璃一样裂开，碎片翻滚着坠落。"],
+  ["sticker-peel", "Sticker Peel", "贴纸撕下", "Peels up from a corner like a die-cut sticker, then the whole sticker lifts away.", "像一张贴纸那样从一角卷起，随后整张被揭起拿走。"],
+  ["confetti", "Confetti", "彩纸礼花", "The window pops and bursts into a shower of fluttering paper confetti.", "窗口“啵”地一下炸成漫天飘落的彩色纸屑。"],
+  ["melt", "Melt", "融化", "Melts like warm wax: the bottom edge sags into glossy drips that run down and away.", "像受热的蜡一样融化：底边垂成一道道发亮的蜡滴，往下流走。"],
+  ["vacuum", "Vacuum", "吸入光标", "Sucked into the spot you clicked, swirling down to a point.", "被吸进你点击的位置，打着旋缩成一个点。"],
+  ["glint", "Glint", "流光", "A sheet of light sweeps across the new window as its edge glows in your accent color.", "一道光扫过新窗口，边缘以系统强调色微微亮起。", true],
+  ["sparkle", "Sparkle", "星光", "A new window arrives with twinkling stars along its edges and a soft ring of light.", "新窗口出现时，边缘闪起点点星光，并荡开一圈柔和的光环。", true],
+].map(([id, name, zh, desc, descZh, open]) => ({ id, name, zh, desc, descZh, open: !!open }));
+const REEL = ["shatter", "burn", "black-hole", "sticker-peel", "dust", "melt", "oldtv", "sparkle"];
+
+const T = {
+  en: {
+    title: "Exit — Give every window a proper exit",
+    navEffects: "Effects", navFeatures: "Features", navPrivacy: "Privacy", navMarket: "Market", navDownload: "Download",
+    headline: "Give every window<br><em>a proper exit.</em>",
+    lede: "Exit is a free, open-source Mac app that plays a GPU animation right where a window closes. It shatters, burns, melts, peels off like a sticker, or turns to dust.",
+    download: "Download for Mac", film: "Watch the film", filmUrl: "https://youtu.be/NLr_VB-BnDU",
+    copy: "Copy", copied: "Copied",
+    meta: r => r ? `Version ${r.version} · ${r.mb} MB · macOS 14 or later · Apple silicon and Intel` : "macOS 14 or later · Apple silicon and Intel",
+    button: r => r ? `Download Exit ${r.version}` : "Download Exit",
+    dmgNote: r => r ? `A ${r.mb} MB disk image, signed and notarized by Apple.` : "A disk image, signed and notarized by Apple.",
+    notes: "Release notes",
+    pause: "Pause", play: "Play", stageLabel: "Exit’s effects playing on a demo window",
+    fxTitle: "Fourteen ways out.",
+    fxLede: "Twelve for leaving and two for arriving, each rendered with Metal at your display’s refresh rate.",
+    all: "All", closing: "Closing", opening: "Opening", openTag: "Opening",
+    fxHint: `Want more? <a href="${MARKET}">Browse the effect market</a>, or write your own.`,
+    lfKicker: "The true last frame", lfTitle: "It starts from exactly what you saw.",
+    lfLede: "Press <kbd>⌘W</kbd>, <kbd>⌘Q</kbd> or <kbd>⌘M</kbd>, or click a close button, and Exit holds the input for a few milliseconds, photographs the window as it is, then lets it go. No stale screenshot, no grey box.",
+    t1: "You close a window", t1d: "Exit notices the shortcut or the click. Every other key passes straight through.",
+    t2: "Exit takes its picture", t2d: "The window, exactly as it looks this instant, held in memory only.",
+    t3: "The window closes", t3d: "The keystroke goes on to the app. If the picture isn’t ready within 160 ms, it goes anyway.",
+    t4: "The effect plays", t4d: "Right where the window was, starting from that very frame.",
+    evKicker: "More than closing", evTitle: "Every exit, and every entrance.",
+    evText: "Closing a window, quitting an app, opening a window and minimizing each get their own effect. Pick one, shuffle, or turn it off.",
+    rows: [["Close window", "Shuffle"], ["Quit app", "Black Hole"], ["Open window", "Glint"], ["Minimize", "Off"]],
+    fiKicker: "Effects are just files", fiTitle: "One Metal file. Save, and it’s live.",
+    fiText: "Each effect is a single shader in your Effects folder. Edit it and it recompiles the moment you save. Share it by sending the file.",
+    saved: "✓ Compiled", fiGuide: "Read the authoring guide", guideUrl: "https://github.com/kadaliao/exit/blob/main/docs/EFFECTS.md",
+    aiKicker: "Describe an effect, get an effect", aiTitle: "Say it in a sentence. AI writes the shader.",
+    aiText: "Exit compiles what the model writes and renders test frames to check that it starts seamlessly, ends cleanly and runs fast. It sends any problems back to the model, then plays the result on your screen.",
+    aiCli: "Use a coding CLI you’re already signed in to", aiApi: "Or your own API key",
+    apis: ["Anthropic", "OpenAI", "Gemini", "OpenRouter", "DeepSeek", "Kimi", "Qwen", "GLM", "Ollama", "Any OpenAI- or Anthropic-compatible endpoint"],
+    aiAsk: "The window pops like a balloon.",
+    aiS0: "Writing the shader…", aiS1: "Compiles", aiS2: "Starts seamlessly from the window", aiS3: "Ends on a clean screen", aiS4: "Fast enough for every frame", aiS5: "Playing it on your screen",
+    mkKicker: "Effect market", mkTitle: "Effects made by other Exit users.",
+    mkText: "Try one on your screen, install it, and it stays up to date. Or subscribe, and new ones arrive by themselves. Made one you like? Press Submit and Exit sends it to the market from your GitHub account.",
+    mkLink: "Browse the market", mkCount: n => n === 1 ? "1 effect so far" : `${n} effects so far`, by: a => `by ${a}`,
+    upKicker: "Keeps itself up to date", upTitle: "New versions, installed while you’re away.",
+    upText: "Once a day Exit checks GitHub for a new release, downloads it in the background, verifies its signature and Apple notarization, and installs it when you step away from your Mac or quit Exit. Both steps can be switched off.",
+    qKicker: "Stays out of the way", qTitle: "Never steals a click or your focus.",
+    qText: "Overlays are click-through and never activate. Exit works across displays, Spaces and full-screen apps, lets you exclude apps or small windows, and goes still when Reduce Motion is on.",
+    pvKicker: "Privacy", pvTitle: "Your windows stay yours.",
+    pvLede: "Window pictures live in memory for a few seconds. They are never written to disk or sent anywhere.",
+    p1: "Accessibility", required: "Required", p2: "Screen Recording", optional: "Optional",
+    p1d: "To notice windows opening, closing and minimizing, and to briefly hold ⌘W, ⌘Q, ⌘M and close-button clicks for the true last frame. Only those are examined; every other key passes straight through.",
+    p2d: "So the animation starts from the window’s real picture. Without it, Exit animates a card with the app’s icon instead.",
+    net: "<b>When Exit goes online.</b> Only when you generate an effect with AI, once a day to check for a new release, and for the effect market. Those requests download public files; nothing about you is sent. Submitting an effect posts a GitHub issue from your account, and only when you press Submit.",
+    dlTitle: "Get Exit.", dlLede: "Free and open source under the MIT license. No account, no trial, no catch.",
+    g1: "Download", g2: "Exit keeps itself up to date either way.", g3: "Build it yourself", g3l: "View the source",
+    s1t: "Drag it to Applications", s1: "Open the disk image and drag Exit into the Applications folder.",
+    s2t: "Open Exit", s2: "It lives in your menu bar. Settings is where you pick effects.",
+    s3t: "Allow Accessibility", s3: "In System Settings → Privacy & Security. Add Screen Recording for the real picture.",
+    req: "Requires macOS 14 Sonoma or later. Runs natively on Apple silicon and Intel Macs.",
+    outro: "Close something.<br><em>Beautifully.</em>",
+    footer: "Exit is free and open-source software under the MIT license.", footReleases: "All releases", footMarket: "Effect market", footGuide: "Authoring guide",
+  },
+  zh: {
+    title: "Exit — 给每个窗口一个体面的退场",
+    navEffects: "特效", navFeatures: "功能", navPrivacy: "隐私", navMarket: "特效市场", navDownload: "下载",
+    headline: "给每个窗口<br><em>一个体面的退场。</em>",
+    lede: "Exit 是一款免费开源的 Mac App：窗口关闭时，在它原来的位置播放一段 GPU 动画——碎成玻璃、烧成灰烬、融化滴落、像贴纸一样被撕下，或者化成尘埃。",
+    download: "下载 Mac 版", film: "观看宣传片", filmUrl: "https://www.bilibili.com/video/BV12FyUzkEPp",
+    copy: "复制", copied: "已复制",
+    meta: r => r ? `版本 ${r.version} · ${r.mb} MB · macOS 14 及以上 · 支持 Apple 芯片和 Intel` : "macOS 14 及以上 · 支持 Apple 芯片和 Intel",
+    button: r => r ? `下载 Exit ${r.version}` : "下载 Exit",
+    dmgNote: r => r ? `${r.mb} MB 的磁盘映像，经过 Apple 签名和公证。` : "磁盘映像，经过 Apple 签名和公证。",
+    notes: "更新说明",
+    pause: "暂停", play: "播放", stageLabel: "Exit 的特效在演示窗口上播放",
+    fxTitle: "十四种退场方式。",
+    fxLede: "十二种退场，两种登场，全部由 Metal 实时渲染，跟上屏幕的每一次刷新。",
+    all: "全部", closing: "退场", opening: "登场", openTag: "登场",
+    fxHint: `还想要更多？<a href="${MARKET}">逛逛特效市场</a>，或者自己写一个。`,
+    lfKicker: "真实的最后一帧", lfTitle: "动画的第一帧，正是你眼前的最后一帧。",
+    lfLede: "按下 <kbd>⌘W</kbd>、<kbd>⌘Q</kbd>、<kbd>⌘M</kbd> 或点击关闭按钮时，Exit 先把输入停留几毫秒，拍下窗口此刻的样子再放行。不会用旧截图，也不会是灰色占位。",
+    t1: "你关闭一个窗口", t1d: "Exit 只留意这几个快捷键和关闭按钮，其他按键一律直接放行。",
+    t2: "Exit 拍下这一帧", t2d: "窗口此刻的样子，只存在内存里。",
+    t3: "窗口关闭", t3d: "按键继续传给 App。如果 160 毫秒内还没拍好，照样放行。",
+    t4: "特效开始播放", t4d: "就在窗口原来的位置，从刚才那一帧开始。",
+    evKicker: "不只是关闭", evTitle: "每一次退场，每一次登场。",
+    evText: "关闭窗口、退出 App、打开窗口、最小化，可以分别指定特效：固定一个、随机，或者关掉。",
+    rows: [["关闭窗口", "随机"], ["退出 App", "黑洞"], ["打开窗口", "流光"], ["最小化", "关闭"]],
+    fiKicker: "特效就是文件", fiTitle: "一个 Metal 文件，保存即生效。",
+    fiText: "每个特效都是特效文件夹里的一个着色器文件。改完一保存就重新编译，发文件就能分享。",
+    saved: "✓ 已编译", fiGuide: "阅读编写指南", guideUrl: "https://github.com/kadaliao/exit/blob/main/docs/EFFECTS.zh-CN.md",
+    aiKicker: "一句话生成特效", aiTitle: "说一句话，AI 写出着色器。",
+    aiText: "Exit 编译模型写出的代码，渲染测试帧，检查开头是否无缝衔接、结尾是否干净、速度够不够快；有问题就反馈给模型修改，最后直接在你的屏幕上播放。",
+    aiCli: "直接用本机已登录的 coding CLI", aiApi: "或者填自己的 API Key",
+    apis: ["Anthropic", "OpenAI", "Gemini", "OpenRouter", "DeepSeek", "Kimi", "通义千问", "智谱 GLM", "Ollama", "任何 OpenAI / Anthropic 兼容的服务"],
+    aiAsk: "窗口像气球一样被戳破。",
+    aiS0: "正在编写着色器…", aiS1: "编译通过", aiS2: "开头与窗口无缝衔接", aiS3: "结尾画面干净", aiS4: "每一帧都够快", aiS5: "在你的屏幕上播放",
+    mkKicker: "特效市场", mkTitle: "其他 Exit 用户做的特效。",
+    mkText: "先在屏幕上试玩，喜欢就安装，之后会自动更新；也可以订阅，新上架的特效自动装上。自己做了满意的？点「投稿」，Exit 用你的 GitHub 账号把它发到特效市场。",
+    mkLink: "逛逛特效市场", mkCount: n => `目前 ${n} 个`, by: a => `作者 ${a}`,
+    upKicker: "自动更新", upTitle: "新版本，趁你离开时装好。",
+    upText: "Exit 每天查一次 GitHub 上的新版本，在后台下载，校验签名和 Apple 公证，等你离开电脑一会儿（或退出 Exit 时）装上。两步都可以在设置里关掉。",
+    qKicker: "不打扰", qTitle: "不抢点击，也不抢焦点。",
+    qText: "叠加层可点穿、从不激活。支持多显示器、多桌面空间和全屏 App，可以按 App 排除、忽略小窗口；开启“减弱动态效果”时自动不播放。",
+    pvKicker: "隐私", pvTitle: "你的窗口，只属于你。",
+    pvLede: "窗口画面只在内存里停留几秒，从不写入磁盘，也不会发到任何地方。",
+    p1: "辅助功能", required: "必需", p2: "屏幕录制", optional: "可选",
+    p1d: "用来感知窗口的打开、关闭和最小化，并在按下 ⌘W、⌘Q、⌘M 或点击关闭按钮时短暂停留输入，拍下真实的最后一帧。只看这几个操作，其他按键一律直接放行。",
+    p2d: "让动画从窗口的真实画面开始。不授权的话，Exit 会用带 App 图标的卡片来播放动画。",
+    net: "<b>Exit 什么时候联网。</b>只有三种情况：你用 AI 生成特效时；每天一次检查新版本；以及特效市场。这些请求只下载公开文件，不发送任何关于你的信息。投稿特效会用你的账号发一个 GitHub issue，而且只在你点「投稿」时才发。",
+    dlTitle: "下载 Exit。", dlLede: "免费开源，MIT 许可证。不用注册，没有试用期，也没有附加条件。",
+    g1: "下载", g2: "两种方式装的 Exit 都会自动更新。", g3: "自己编译", g3l: "查看源码",
+    s1t: "拖进“应用程序”", s1: "打开磁盘映像，把 Exit 拖进“应用程序”文件夹。",
+    s2t: "打开 Exit", s2: "它在菜单栏里，在设置里挑特效。",
+    s3t: "允许辅助功能", s3: "在“系统设置 → 隐私与安全性”里打开；再允许屏幕录制，动画就从真实画面开始。",
+    req: "需要 macOS 14 Sonoma 及以上，原生支持 Apple 芯片和 Intel 芯片的 Mac。",
+    outro: "关个窗口，<br><em>也要好看。</em>",
+    footer: "Exit 是免费开源软件，以 MIT 许可证发布。", footReleases: "所有版本", footMarket: "特效市场", footGuide: "特效编写指南",
+  },
+};
+
+const ICONS = {
+  pause: '<svg viewBox="0 0 14 14"><rect x="2" y="1" width="3.5" height="12" rx="1"/><rect x="8.5" y="1" width="3.5" height="12" rx="1"/></svg>',
+  play: '<svg viewBox="0 0 14 14"><path d="M3 1.5v11a.8.8 0 0 0 1.2.7l9-5.5a.8.8 0 0 0 0-1.4l-9-5.5A.8.8 0 0 0 3 1.5z"/></svg>',
+  ev: [
+    '<svg viewBox="0 0 18 18"><circle cx="9" cy="9" r="7.2"/><path d="M6.5 6.5l5 5M11.5 6.5l-5 5"/></svg>',
+    '<svg viewBox="0 0 18 18"><circle cx="9" cy="9" r="7.2"/><path d="M9 4.6v4.2"/><path d="M6.2 6.4a4 4 0 1 0 5.6 0"/></svg>',
+    '<svg viewBox="0 0 18 18"><circle cx="9" cy="9" r="7.2"/><path d="M9 5.8v6.4M5.8 9h6.4"/></svg>',
+    '<svg viewBox="0 0 18 18"><circle cx="9" cy="9" r="7.2"/><path d="M5.8 9h6.4"/></svg>',
+  ],
+};
+
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]));
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const touch = matchMedia("(hover: none)").matches;
+let lang = (() => {
+  try { const s = localStorage.getItem("lang"); if (s === "en" || s === "zh") return s; } catch (e) {}
+  return (navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en";
+})();
+const nameOf = e => lang === "zh" ? e.zh : e.name;
+const descOf = e => lang === "zh" ? e.descZh : e.desc;
+
+/* ---------- The stage: built-in effects, one after another ---------- */
+const stage = { list: REEL.map(id => FX.find(e => e.id === id)), i: 0, els: [], playing: !reduced, visible: true };
+
+function buildStage() {
+  const box = $("#stage");
+  stage.els = stage.list.map((e, k) => {
+    const v = document.createElement("video");
+    v.muted = true; v.playsInline = true; v.preload = k < 2 ? "auto" : "none";
+    v.setAttribute("muted", ""); v.setAttribute("playsinline", "");
+    v.poster = `media/${e.id}.jpg`;
+    v.src = `media/${e.id}.mp4`;
+    v.addEventListener("ended", () => { if (stage.playing) go(stage.i + 1); });
+    box.insertBefore(v, $("#toggle"));
+    return v;
+  });
+  $("#reel").innerHTML = stage.list.map((e, k) => `<button type="button" data-k="${k}"></button>`).join("");
+  go(0, true);
+}
+
+function go(k, first) {
+  k = (k + stage.list.length) % stage.list.length;
+  const prev = stage.els[stage.i], next = stage.els[k];
+  stage.i = k;
+  next.currentTime = 0;
+  if (stage.playing && stage.visible) next.play().catch(() => setPlaying(false));
+  const after = stage.els[(k + 1) % stage.els.length];
+  if (after) after.preload = "auto";
+  next.classList.add("on");
+  if (prev && prev !== next) {
+    prev.classList.remove("on");
+    setTimeout(() => { if (!prev.classList.contains("on")) prev.pause(); }, 450);
+  }
+  $$("#reel button").forEach((b, j) => { b.setAttribute("aria-current", j === k); b.style.setProperty("--p", 0); });
+  const cap = $("#caption"), e = stage.list[k];
+  const fill = () => {
+    cap.querySelector(".name").textContent = nameOf(e);
+    cap.querySelector(".desc").textContent = descOf(e);
+    cap.classList.remove("swap");
+  };
+  if (first || reduced) fill(); else { cap.classList.add("swap"); setTimeout(fill, 220); }
+}
+
+function tick() {
+  const v = stage.els[stage.i], b = $(`#reel button[data-k="${stage.i}"]`);
+  if (v && b && v.duration) b.style.setProperty("--p", Math.min(1, v.currentTime / v.duration));
+  requestAnimationFrame(tick);
+}
+
+function setPlaying(on) {
+  stage.playing = on;
+  const t = $("#toggle");
+  t.innerHTML = on ? ICONS.pause : ICONS.play;
+  t.setAttribute("aria-label", on ? T[lang].pause : T[lang].play);
+  const v = stage.els[stage.i];
+  if (!v) return;
+  if (on && stage.visible) { if (v.ended) v.currentTime = 0; v.play().catch(() => {}); } else v.pause();
+}
+
+$("#toggle").addEventListener("click", () => setPlaying(!stage.playing));
+$("#reel").addEventListener("click", ev => {
+  const b = ev.target.closest("button"); if (!b) return;
+  if (!stage.playing) setPlaying(true);
+  go(+b.dataset.k);
+});
+new IntersectionObserver(([en]) => {
+  stage.visible = en.isIntersecting;
+  const v = stage.els[stage.i];
+  if (v) { if (stage.visible && stage.playing) v.play().catch(() => {}); else v.pause(); }
+}, { threshold: .1 }).observe($("#stage"));
+document.addEventListener("visibilitychange", () => {
+  const v = stage.els[stage.i]; if (!v) return;
+  if (document.hidden) v.pause(); else if (stage.playing && stage.visible) v.play().catch(() => {});
+});
+
+/* ---------- The gallery: hover (or scroll, on touch screens) to play ---------- */
+let filter = "all";
+function renderGrid() {
+  const list = FX.filter(e => filter === "all" || (filter === "open") === e.open);
+  $("#grid").innerHTML = list.map(e => `
+    <button class="fx" type="button" aria-label="${esc(nameOf(e))}">
+      <div class="media">
+        <video muted playsinline loop preload="none" src="media/${e.id}.mp4"></video>
+        <img src="media/${e.id}.jpg" alt="" loading="lazy">
+        ${e.open ? `<span class="tag">${esc(T[lang].openTag)}</span>` : ""}
+      </div>
+      <h3>${esc(nameOf(e))}</h3>
+      <p>${esc(descOf(e))}</p>
+    </button>`).join("");
+  $$("#grid .fx").forEach(wire);
+}
+function wire(c) {
+  const v = c.querySelector("video");
+  const play = () => { c.classList.add("playing"); v.currentTime = 0; v.play().catch(() => {}); };
+  const stop = () => { c.classList.remove("playing"); v.pause(); };
+  if (touch) { cardObserver.observe(c); return; }
+  c.addEventListener("pointerenter", play);
+  c.addEventListener("pointerleave", stop);
+  c.addEventListener("focus", play);
+  c.addEventListener("blur", stop);
+}
+const cardObserver = new IntersectionObserver(entries => entries.forEach(en => {
+  const v = en.target.querySelector("video");
+  if (en.isIntersecting && !reduced) { en.target.classList.add("playing"); v.play().catch(() => {}); }
+  else { en.target.classList.remove("playing"); v.pause(); }
+}), { threshold: .8 });
+$("#filter").addEventListener("click", ev => {
+  const b = ev.target.closest("button"); if (!b) return;
+  filter = b.dataset.f;
+  $$("#filter button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  renderGrid();
+});
+
+/* ---------- The market: newest effects from the live index ---------- */
+let market = null;
+function renderMarket() {
+  const box = $("#market");
+  if (!market || !market.length) { box.hidden = true; return; }
+  box.hidden = false;
+  const t = T[lang], abs = p => new URL(p, MARKET).href;
+  box.innerHTML = market.slice(0, 3).map(e => {
+    const name = (lang === "zh" && e.name_zh) || e.name;
+    const still = e.poster || e.preview;
+    return `<a href="${esc(MARKET + "#" + e.id)}">
+      <div class="media">${still ? `<img src="${esc(abs(still))}" alt="" loading="lazy">` : ""}</div>
+      <span>${esc(name)}</span>${e.author ? `<small>${esc(t.by(e.author))}</small>` : ""}
+    </a>`;
+  }).join("");
+  const link = $('[data-i18n="mkLink"]');
+  link.textContent = `${t.mkLink} · ${t.mkCount(market.length)}`;
+}
+fetch(MARKET + "index.json", { cache: "no-cache" })
+  .then(r => r.ok ? r.json() : Promise.reject(r.status))
+  .then(j => {
+    market = (j.effects || []).filter(e => e && e.id && e.name)
+      .sort((a, b) => (b.added || "").localeCompare(a.added || "") || a.name.localeCompare(b.name));
+    renderMarket();
+  })
+  .catch(() => renderMarket());
+
+/* ---------- Copy buttons ---------- */
+document.addEventListener("click", async ev => {
+  const b = ev.target.closest(".copy"); if (!b) return;
+  try { await navigator.clipboard.writeText(b.dataset.copy); } catch (e) { return; }
+  b.textContent = T[lang].copied; b.classList.add("done");
+  setTimeout(() => { b.textContent = T[lang].copy; b.classList.remove("done"); }, 1600);
+});
+
+/* ---------- Text ---------- */
+function applyText() {
+  const t = T[lang], r = HAVE_REL ? REL : null;
+  document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+  document.title = t.title;
+  $$("[data-i18n]").forEach(el => { if (typeof t[el.dataset.i18n] === "string") el.textContent = t[el.dataset.i18n]; });
+  $$("[data-i18n-html]").forEach(el => { el.innerHTML = t[el.dataset.i18nHtml]; });
+  $$("[data-rel]").forEach(el => { el.textContent = t[el.dataset.rel](r); });
+  $$("a.dmg").forEach(a => { a.href = REL.dmg; });
+  $$('[data-rel-href="notes"]').forEach(a => { a.href = REL.notes; });
+  $$(".film").forEach(a => { a.href = t.filmUrl; });
+  $("#guide").href = $("#guide2").href = t.guideUrl;
+  $("#rows").innerHTML = t.rows.map(([k, v], i) =>
+    `<div>${ICONS.ev[i]}<span>${esc(k)}</span><span class="v${i < 3 ? " on" : ""}">${esc(v)}</span></div>`).join("");
+  $("#apis").innerHTML = t.apis.map(a => `<span>${esc(a)}</span>`).join("");
+  const l = $("#lang");
+  l.textContent = lang === "zh" ? "English" : "中文";
+  l.lang = lang === "zh" ? "en" : "zh-CN";
+  $("#stage").setAttribute("aria-label", t.stageLabel);
+  $$("#reel button").forEach((b, k) => { b.textContent = nameOf(stage.list[k]); });
+  if (stage.els.length) go(stage.i, true);
+  renderGrid();
+  renderMarket();
+  setPlaying(stage.playing);
+}
+$("#lang").addEventListener("click", () => {
+  lang = lang === "zh" ? "en" : "zh";
+  try { localStorage.setItem("lang", lang); } catch (e) {}
+  applyText();
+});
+
+buildStage();
+applyText();
+tick();
+</script>
+</body>
+</html>

@@ -5,7 +5,7 @@ plays a GPU animation right where a window closes — it shatters, burns, melts,
 like a sticker, gets sucked into your cursor, or turns to dust. Windows can make an
 entrance too.
 
-[中文说明](README.zh-CN.md)
+**Website: [kadaliao.github.io/exit](https://kadaliao.github.io/exit/)** · [中文说明](README.zh-CN.md)
 
 ## Effects
 
@@ -146,7 +146,8 @@ Requires macOS 14 or later (Apple Silicon and Intel).
 brew install --cask kadaliao/tap/exit
 ```
 
-Or download the DMG from [Releases](https://github.com/kadaliao/exit/releases/latest).
+Or download the DMG from the [website](https://kadaliao.github.io/exit/#download) or
+[Releases](https://github.com/kadaliao/exit/releases/latest).
 
 Or build it yourself:
 
