@@ -471,9 +471,14 @@ private struct PillButtonStyle: ButtonStyle {
 
 // MARK: - Sharing
 
-/// Sharing your own effect is a job for a coding agent: it runs `Exit --market submit`.
+/// Submit your own effect in one click (the sheet does the checks and the GitHub part), or hand
+/// the job to a coding agent, which runs `Exit --market submit`.
 private struct ShareCard: View {
+    @ObservedObject private var library = EffectLibrary.shared
+    @EnvironmentObject private var nav: SettingsNavigation
     @State private var copied = false
+
+    private var mine: [Effect] { library.effects.filter { $0.origin == .user } }
 
     private var prompt: String {
         T("Submit one of my Exit effects to the Exit effect market. Follow the guide at \(MarketSubmit.guide.absoluteString). My effects are in ~/Library/Application Support/Exit/Effects/; ask me which one if it isn’t clear.",
@@ -484,26 +489,47 @@ private struct ShareCard: View {
         HStack(alignment: .center, spacing: 14) {
             ZStack {
                 RoundedRectangle(cornerRadius: 10, style: .continuous).fill(dusk)
-                Image(systemName: "sparkles").font(.system(size: 19, weight: .semibold)).foregroundStyle(.white)
+                Image(systemName: "paperplane.fill").font(.system(size: 18, weight: .semibold)).foregroundStyle(.white)
             }
             .frame(width: 42, height: 42)
             VStack(alignment: .leading, spacing: 2) {
                 Text(T("Made one you like?", "做了满意的特效？")).font(.headline)
-                Text(T("Your coding agent can submit it: it checks the effect, sends it in and tells you how it went.",
-                       "让 coding agent 帮你投稿：它会检查特效、提交到市场，再告诉你结果。"))
+                Text(mine.isEmpty
+                     ? T("Create one with AI, then submit it here in one click.", "先用 AI 生成一个，再在这里一键投稿。")
+                     : T("Submit it in one click: Exit checks it, sends it from your GitHub account and tells you how it went.",
+                         "一键投稿：Exit 会检查特效，用你的 GitHub 账号提交，再告诉你结果。"))
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 10)
-            Button(copied ? T("Copied", "已复制") : T("Copy Prompt", "复制提示词")) {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(prompt, forType: .string)
-                copied = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copied = false }
+            if mine.isEmpty {
+                Button(T("Create with AI", "AI 生成")) { nav.tab = .ai }.buttonStyle(PillButtonStyle())
+            } else {
+                Menu {
+                    ForEach(mine) { e in
+                        Button(e.meta.displayName) { SubmissionCenter.shared.present(e) }
+                    }
+                } label: {
+                    Text(T("Submit…", "投稿…"))
+                }
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .padding(.horizontal, 13).padding(.vertical, 4)
+                .background(Capsule().fill(Color.primary.opacity(0.09)))
+                .help(T("Pick one of your effects to submit", "选一个你的特效投稿"))
             }
-            .buttonStyle(PillButtonStyle())
-            .help(T("Copies a request you can paste into Claude Code, Codex or another agent.",
-                    "复制一段请求，粘贴给 Claude Code、Codex 等 agent 即可。"))
-            Button(T("Guide", "指南")) { NSWorkspace.shared.open(MarketSubmit.guide) }.buttonStyle(.link)
+            Menu {
+                Button(copied ? T("Copied", "已复制") : T("Copy a Prompt for a Coding Agent", "复制给 coding agent 的提示词")) {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(prompt, forType: .string)
+                    copied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copied = false }
+                }
+                Button(T("Submission Guide", "投稿指南")) { NSWorkspace.shared.open(MarketSubmit.guide) }
+            } label: { Image(systemName: "ellipsis.circle") }
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                .foregroundStyle(.secondary)
+                .help(T("More ways to submit", "更多投稿方式"))
         }
         .padding(16)
         .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.primary.opacity(0.045)))

@@ -122,6 +122,10 @@ struct GeneratedResult: View {
                         Label(forOpen ? T("Use for opening", "设为打开特效") : T("Use for closing", "设为关闭特效"), systemImage: "checkmark")
                     }
                     Button { NSWorkspace.shared.open(effect.url) } label: { Label(T("Edit", "编辑"), systemImage: "pencil") }
+                    Button { SubmissionCenter.shared.present(effect) } label: {
+                        Label(T("Submit to Market…", "投稿到市场…"), systemImage: "paperplane")
+                    }
+                    .help(T("Share it with every Exit user through the Effect Market", "通过特效市场分享给所有 Exit 用户"))
                 }
             }
             Spacer()

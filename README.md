@@ -119,9 +119,15 @@ entrance too.
 - **An effect market.** Settings → Market lists effects made by other Exit users
   ([browse them on the web](https://kadaliao.github.io/exit-effects/)). Try one on screen,
   install it, and it stays up to date; or subscribe and new effects arrive by themselves.
-  Made one you like? Ask your coding agent to submit it: `Exit --market submit` checks it
-  and sends it to [exit-effects](https://github.com/kadaliao/exit-effects), where a bot
-  renders a preview and opens a pull request ([guide for agents](https://github.com/kadaliao/exit-effects/blob/main/AGENTS.md)).
+  Made one you like (by hand or with AI)? Press Submit on its card: Exit checks it, sends
+  it from your GitHub account to [exit-effects](https://github.com/kadaliao/exit-effects),
+  where a bot renders a preview and opens a pull request, and shows you the bot's answer.
+  Sign in with GitHub once, or use the GitHub CLI if it's signed in. Coding agents can do
+  the same with `Exit --market submit` ([guide for agents](https://github.com/kadaliao/exit-effects/blob/main/AGENTS.md)).
+- **Keeps itself up to date.** Exit checks GitHub Releases once a day, downloads a new
+  version in the background, checks its signature and notarization, and installs it while
+  you're away from the Mac (or when it quits). Both steps can be switched off in Settings →
+  General; "Check for Updates…" is in the menu.
 - **Describe an effect, get an effect.** Type "the window pops like a balloon" and an AI
   model writes the shader. Exit compiles it, renders test frames to check it starts
   seamlessly, ends cleanly and runs fast, sends any problems back to the model, and plays
@@ -158,10 +164,13 @@ open build/Exit.app
 | Screen Recording (optional) | So the animation starts from the window's real picture. Without it Exit animates a card with the app's icon. |
 
 Window pictures live in memory for a few seconds and are never written to disk or sent
-anywhere. Exit makes network requests only when you generate an effect with AI, and for
-the effect market: when you open Settings → Market, and every few hours if you have
-installed market effects (to update them) or subscribed to new ones. Those requests just
-download the market's public `index.json` and effect files; nothing about you is sent.
+anywhere. Exit makes network requests only when you generate an effect with AI; once a
+day to ask GitHub for the latest release (and to download it); and for the effect market:
+when you open Settings → Market, and every few hours if you have installed market effects
+(to update them) or subscribed to new ones. Those requests just download public files;
+nothing about you is sent. Submitting an effect posts it as a GitHub issue from your
+account, only when you press Submit. Exit's GitHub sign-in can only read and write issues
+in the market's repository, and its token stays in your login Keychain.
 
 ## Making effects
 
@@ -188,7 +197,8 @@ Exit.app/Contents/MacOS/Exit --validate --only my-effect   # seamless start, cle
 Exit.app/Contents/MacOS/Exit --render-sheet out.png --only my-effect
 Exit.app/Contents/MacOS/Exit --bench
 Exit.app/Contents/MacOS/Exit --market list                 # also: install ID, uninstall ID
-Exit.app/Contents/MacOS/Exit --market submit my-effect --wait   # send it to the market (needs gh)
+Exit.app/Contents/MacOS/Exit --market submit my-effect --wait   # send it to the market
+Exit.app/Contents/MacOS/Exit --update                      # update now (--check only looks)
 ```
 
 Add `--effects-dir DIR` to test the files in a folder without your own effects in the way.

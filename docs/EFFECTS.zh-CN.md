@@ -148,15 +148,19 @@ float4 effect(float2 p, constant Exit& u, texture2d<float> tex) {
 
 ## 分享出去
 
-让你的 coding agent（Claude Code、Codex 等）帮你投稿到特效市场，
-[agent 投稿指南](https://github.com/kadaliao/exit-effects/blob/main/AGENTS.md)会告诉它怎么做。
-“设置 → 特效市场 → **复制提示词**”可以复制一段现成的请求。agent 实际运行的是
+在“设置 → 特效”里点特效卡片上的**投稿**按钮（纸飞机），或者 AI 生成结果旁的“投稿到市场”。
+Exit 先在你的 Mac 上跑一遍市场的检查，再用你的 GitHub 账号在
+[exit-effects](https://github.com/kadaliao/exit-effects) 上提交投稿（第一次在 github.com
+上输入一个验证码登录，或者直接用已登录的 GitHub CLI），然后把市场机器人的回复显示在卡片上：
+机器人会再检查一遍首尾帧和性能、渲染预览，并以你为作者自动提交 PR。改好之后再点一次投稿，
+会更新同一份投稿。
+
+coding agent（Claude Code、Codex 等）也能帮你投稿，
+[agent 投稿指南](https://github.com/kadaliao/exit-effects/blob/main/AGENTS.md)会告诉它怎么做：
 
 ```sh
 Exit.app/Contents/MacOS/Exit --market submit my-effect --wait
 ```
 
-它会先检查特效，再用 GitHub CLI 在 [exit-effects](https://github.com/kadaliao/exit-effects)
-上提交投稿，然后等市场的机器人回复：机器人会再检查一遍首尾帧和性能、渲染预览，并以你为作者
-自动提交 PR；审核通过后，所有人都能在“设置 → 特效市场”里看到它。记得写上 `@name`、
-`@description` 和 `@author`（能写 `.zh` 中文版更好）。市场里的特效以 MIT 许可证发布。
+审核通过后，所有人都能在“设置 → 特效市场”里看到它。记得写上 `@name`、`@description` 和
+`@author`（能写 `.zh` 中文版更好）。市场里的特效以 MIT 许可证发布。

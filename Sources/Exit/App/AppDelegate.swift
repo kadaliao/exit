@@ -40,7 +40,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
 
-        MainActor.assumeIsolated { MarketStore.shared.startAutoRefresh() }
+        MainActor.assumeIsolated {
+            MarketStore.shared.startAutoRefresh()
+            Updater.shared.start()
+        }
 
         if AX.isTrusted() {
             ExitEngine.shared.start()
@@ -48,6 +51,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             openSettings(tab: .permissions)
             waitForAccessibility()
         }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        MainActor.assumeIsolated { Updater.shared.installOnQuit() }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -85,6 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         add("Exit", [
             item(T("Settings…", "设置…"), #selector(openSettingsAction), ",", target: self),
+            item(T("Check for Updates…", "检查更新…"), #selector(checkForUpdates), "", target: self),
             .separator(),
             item(T("Quit Exit", "退出 Exit"), #selector(NSApplication.terminate(_:)), "q"),
         ])
@@ -116,6 +124,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         let s = Settings.shared
+
+        // A new version waiting goes first.
+        let updateTitle: String? = MainActor.assumeIsolated {
+            let u = Updater.shared
+            guard let r = u.release, !u.isWorking else { return nil }
+            if case .installed = u.state { return T("Relaunch to Use Exit \(r.version)", "重新打开以使用 Exit \(r.version)") }
+            return T("Update to Exit \(r.version)…", "更新到 Exit \(r.version)…")
+        }
+        if let updateTitle {
+            let up = NSMenuItem(title: updateTitle, action: #selector(updateNow), keyEquivalent: "")
+            up.image = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: nil)
+            up.target = self
+            menu.addItem(up)
+            menu.addItem(.separator())
+        }
 
         let toggle = NSMenuItem(title: T("Effects On", "特效已开启"), action: #selector(toggleEnabled), keyEquivalent: "")
         toggle.state = s.enabled ? .on : .off
@@ -170,6 +193,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let settings = NSMenuItem(title: T("Settings…", "设置…"), action: #selector(openSettingsAction), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
+        let check = NSMenuItem(title: T("Check for Updates…", "检查更新…"), action: #selector(checkForUpdates), keyEquivalent: "")
+        check.target = self
+        menu.addItem(check)
         let quit = NSMenuItem(title: T("Quit Exit", "退出 Exit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quit)
     }
@@ -213,6 +239,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let id = sender.representedObject as? String, let e = EffectLibrary.shared.effect(id: id) else { return }
         // Let the menu close first so the preview isn't hidden behind it.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { ExitEngine.shared.preview(e) }
+    }
+
+    @objc private func checkForUpdates() {
+        MainActor.assumeIsolated { _ = Task { await Updater.shared.check(userInitiated: true) } }
+    }
+
+    @objc private func updateNow() {
+        MainActor.assumeIsolated {
+            let u = Updater.shared
+            if case .installed = u.state { u.relaunch() } else if let r = u.release { u.offer(r) }
+        }
     }
 
     @objc private func openFolder() { NSWorkspace.shared.open(Paths.userEffects) }

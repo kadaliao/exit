@@ -17,9 +17,14 @@
   Metal 着色器文件，保存即重新编译，发文件就能分享。写法见[编写指南](docs/EFFECTS.zh-CN.md)。
 - **特效市场。** “设置 → 特效市场”里是其他 Exit 用户做的特效（也可以[在网页上浏览](https://kadaliao.github.io/exit-effects/)）。
   先在屏幕上试玩，喜欢就安装，之后会自动更新；也可以订阅，新上架的特效自动装上。
-  自己做了满意的特效，让你的 coding agent 帮你投稿：`Exit --market submit` 会检查特效并发到
-  [exit-effects](https://github.com/kadaliao/exit-effects)，机器人渲染预览后自动提交 PR
+  自己写的或 AI 生成的特效满意了，在它的卡片上点「投稿」：Exit 检查特效，用你的 GitHub
+  账号发到 [exit-effects](https://github.com/kadaliao/exit-effects)，机器人渲染预览后自动
+  提交 PR，结果直接显示在 Exit 里。第一次用 GitHub 登录一下就行，已经登录了 GitHub CLI
+  的话连这步都省了。coding agent 也可以用 `Exit --market submit` 投稿
   （[agent 投稿指南](https://github.com/kadaliao/exit-effects/blob/main/AGENTS.md)）。
+- **自动更新。** Exit 每天查一次 GitHub Releases，在后台下载新版本，校验签名和公证，
+  等你离开电脑一会儿（或退出 Exit 时）装上。两步都可以在“设置 → 通用”里关掉，菜单里
+  也有“检查更新…”。
 - **一句话生成特效。** 输入“窗口像气球一样被戳破”，AI 模型写出着色器；Exit 编译后渲染
   测试帧，自动检查开头是否无缝衔接、结尾是否干净、速度够不够快，有问题就反馈给模型
   修改，最后直接播放给你看。可以直接用本机已登录的 Claude Code、Codex、Gemini CLI、
@@ -149,10 +154,12 @@ open build/Exit.app
 | 辅助功能（必需） | 感知窗口的打开、关闭、最小化；在 ⌘W / ⌘Q / ⌘M 和点击关闭按钮时短暂停留，拍下最后一帧。只检查这几个快捷键，其他按键原样放行。 |
 | 录屏（可选） | 让动画从窗口的真实画面开始。没有这个权限时，会用带 App 图标的卡片代替。 |
 
-窗口画面只在内存里停留几秒，不会写入磁盘，也不会发送到任何地方。Exit 只在两种情况下
-联网：你用 AI 生成特效时；以及特效市场——打开“设置 → 特效市场”时，或者装了市场特效
-（为了更新）、订阅了新特效时每隔几小时检查一次。市场请求只是下载公开的 `index.json`
-和特效文件，不会发送任何关于你的信息。
+窗口画面只在内存里停留几秒，不会写入磁盘，也不会发送到任何地方。Exit 只在这几种情况下
+联网：你用 AI 生成特效时；每天向 GitHub 查一次最新版本（有新版本时下载）；以及特效
+市场——打开“设置 → 特效市场”时，或者装了市场特效（为了更新）、订阅了新特效时每隔几
+小时检查一次。这些请求只是下载公开文件，不会发送任何关于你的信息。只有你点「投稿」时，
+特效才会以你的 GitHub 账号发成一个公开 issue；Exit 的 GitHub 登录只能读写特效市场仓库
+的 issue，令牌保存在登录钥匙串里。
 
 ## 写特效
 
@@ -163,7 +170,8 @@ Exit.app/Contents/MacOS/Exit --check                       # 编译全部特效
 Exit.app/Contents/MacOS/Exit --validate --only my-effect   # 检查无缝开头、干净结尾、性能
 Exit.app/Contents/MacOS/Exit --render-sheet out.png --only my-effect
 Exit.app/Contents/MacOS/Exit --market list                 # 还有 install ID、uninstall ID
-Exit.app/Contents/MacOS/Exit --market submit my-effect --wait   # 投稿到特效市场（需要 gh）
+Exit.app/Contents/MacOS/Exit --market submit my-effect --wait   # 投稿到特效市场
+Exit.app/Contents/MacOS/Exit --update                      # 立即更新（--check 只检查）
 ```
 
 加上 `--effects-dir 目录` 可以只测试那个目录里的文件，不受你自己的特效干扰。

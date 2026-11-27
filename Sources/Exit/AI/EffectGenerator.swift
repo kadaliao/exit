@@ -130,6 +130,8 @@ final class EffectGenerator: ObservableObject {
     }
 
     private func save(_ code: String) throws {
+        // The examples say `@author Exit`; the effect belongs to whoever asked for it.
+        let code = MarketSubmit.settingAuthor(code, nil)
         let lib = EffectLibrary.shared
         let meta = EffectMeta.parse(source: code, fallbackName: "ai-effect")
         let id = lib.uniqueUserID(base: meta.name)
@@ -174,7 +176,8 @@ final class EffectGenerator: ObservableObject {
 
             Output format: reply with exactly one ```metal code block containing the complete file — \
             the `// @` header (pick a short evocative English @name, a natural Chinese @name.zh, \
-            one-line descriptions in both languages, a fitting duration and padding), any helper \
+            one-line descriptions in both languages, a fitting duration and padding; no @author \
+            line: the person who asked for it is the author), any helper \
             functions (give them a unique prefix), and `float4 effect(float2 p, constant Exit& u, \
             texture2d<float> tex)`. Do not redefine anything from the prelude.
             """

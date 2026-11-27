@@ -36,12 +36,14 @@ struct EffectsPane: View {
             .padding(20)
         }
         .background(Color(nsColor: .windowBackgroundColor))
+        .onAppear { SubmissionCenter.shared.refreshStatuses() }
     }
 }
 
 struct EffectCard: View {
     @ObservedObject var effect: Effect
     @ObservedObject var settings = Settings.shared
+    @ObservedObject private var submissions = SubmissionCenter.shared
     @State private var hovering = false
 
     private var inShuffle: Binding<Bool> {
@@ -73,6 +75,11 @@ struct EffectCard: View {
             .frame(height: 128)
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.quaternary))
+            .overlay(alignment: .topLeading) {
+                if effect.origin == .user, let record = submissions.record(for: effect.id) {
+                    SubmissionChip(record: record) { submissions.present(effect) }.padding(7)
+                }
+            }
             .onTapGesture { ExitEngine.shared.preview(effect) }
             .help(T("Click to play it on screen", "点击在屏幕上播放"))
 
@@ -82,6 +89,7 @@ struct EffectCard: View {
                     Text(effect.origin == .market ? T("Market", "市场") : T("Custom", "自定义"))
                         .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
                         .background(Capsule().fill((effect.origin == .market ? Color.green : Color.accentColor).opacity(0.18)))
+                        .fixedSize()
                 }
                 Spacer()
                 ForEach(effect.meta.events.sorted { $0.rawValue < $1.rawValue }) { e in
@@ -100,6 +108,8 @@ struct EffectCard: View {
                 Button { NSWorkspace.shared.activateFileViewerSelecting([effect.url]) } label: { Image(systemName: "folder") }
                     .help(T("Show in Finder", "在访达中显示"))
                 if effect.origin == .user {
+                    Button { submissions.present(effect) } label: { Image(systemName: "paperplane") }
+                        .help(T("Submit to the Effect Market…", "投稿到特效市场…"))
                     Button { trash() } label: { Image(systemName: "trash") }.help(T("Move to Trash", "移到废纸篓"))
                 } else if effect.origin == .market {
                     Button { MarketStore.shared.uninstall(id: effect.id) } label: { Image(systemName: "trash") }
@@ -121,6 +131,33 @@ struct EffectCard: View {
     private func trash() {
         try? FileManager.default.trashItem(at: effect.url, resultingItemURL: nil)
         EffectLibrary.shared.rescan()
+    }
+}
+
+/// A submission's state as a small capsule on an effect card; clicking it opens the Submit sheet.
+struct SubmissionChip: View {
+    let record: SubmissionCenter.Record
+    let action: () -> Void
+    @ObservedObject private var center = SubmissionCenter.shared
+
+    var body: some View {
+        let (text, symbol, color): (String, String, Color) = switch record.status {
+        case .checking: (T("Checking…", "检查中…"), "hourglass", .gray)
+        case .accepted: (T("In review", "审核中"), "checkmark.seal.fill", .blue)
+        case .needsChanges: (T("Needs changes", "需要修改"), "exclamationmark.circle.fill", .orange)
+        case .closed: center.isPublished(record) ? (T("In the market", "已上架"), "storefront.fill", .green)
+                                                 : (T("Closed", "已关闭"), "archivebox.fill", .gray)
+        }
+        Button(action: action) {
+            Label(text, systemImage: symbol)
+                .font(.caption2.weight(.semibold)).lineLimit(1).fixedSize()
+                .foregroundStyle(.white)
+                .padding(.horizontal, 7).padding(.vertical, 3)
+                .background(Capsule().fill(color.opacity(0.9)))
+                .shadow(color: .black.opacity(0.2), radius: 2, y: 1)
+        }
+        .buttonStyle(.plain)
+        .help(T("Submitted to the Effect Market. Click for details.", "已投稿到特效市场，点击查看详情。"))
     }
 }
 

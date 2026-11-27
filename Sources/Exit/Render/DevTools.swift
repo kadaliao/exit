@@ -10,11 +10,12 @@ import SwiftUI
 ///   Exit --version
 ///   Exit --market [list | update | install ID | uninstall ID]   the effect market, from the terminal
 ///   Exit --market submit FILE|ID [--notes TEXT] [--wait] [--dry-run]   send an effect to the market (for agents)
+///   Exit --update [--check] [--app PATH]   update this copy of Exit (or the app at PATH) from GitHub Releases
 /// Add `--effects-dir DIR` to read effects from DIR instead of your own folder (installed market
 /// effects are skipped too), so CI and reviewers test exactly the files in front of them.
 enum DevTools {
     static let commands = ["--check", "--render-sheet", "--bench", "--render-frames", "--render-sequence", "--validate",
-                           "--generate", "--snapshot-ui", "--ai-ping", "--version", "--market"]
+                           "--generate", "--snapshot-ui", "--ai-ping", "--version", "--market", "--update"]
 
     static func run(_ args: [String]) -> Int32? {
         guard let cmd = args.first(where: { commands.contains($0) }) else { return nil }
@@ -25,6 +26,10 @@ enum DevTools {
         func value(_ flag: String) -> String? {
             guard let i = args.firstIndex(of: flag), i + 1 < args.count else { return nil }
             return args[i + 1]
+        }
+        if cmd == "--update" {
+            return update(app: value("--app").map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) },
+                          checkOnly: args.contains("--check"))
         }
         if let dir = value("--effects-dir") {
             Paths.effectsDirOverride = URL(fileURLWithPath: dir, isDirectory: true).standardizedFileURL
@@ -160,6 +165,24 @@ enum DevTools {
             ThumbnailView.stillFrames = true
             let size = value("--size").map { $0.split(separator: "x").compactMap { Double($0) } } ?? []
             let (width, height) = size.count == 2 ? (size[0], size[1]) : (860, 600)
+            // --submit-sheet ID: the Submit sheet for one of your effects, once its checks have run.
+            if let id = value("--submit-sheet") {
+                guard let effect = lib.effect(id: id) else { print("no effect \(id)"); return 2 }
+                lib.compile(effect, synchronously: true)
+                let host = NSHostingView(rootView: SubmitSheet(effect: effect).background(Color(nsColor: .windowBackgroundColor)))
+                let w = NSWindow(contentRect: CGRect(x: -3000, y: -3000, width: 600, height: 640),
+                                 styleMask: [.titled, .fullSizeContentView], backing: .buffered, defer: false)
+                w.contentView = host
+                w.orderFrontRegardless()
+                RunLoop.main.run(until: Date().addingTimeInterval(Double(value("--wait") ?? "6") ?? 6))
+                if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+                    host.cacheDisplay(in: host.bounds, to: rep)
+                    let url = URL(fileURLWithPath: dir).appendingPathComponent("submit-\(id).png")
+                    try? rep.representation(using: .png, properties: [:])?.write(to: url)
+                    print("wrote \(url.path)")
+                }
+                return 0
+            }
             for tab in SettingsTab.allCases where value("--tab").map({ $0 == tab.rawValue }) ?? true {
                 let nav = SettingsNavigation()
                 nav.tab = tab
@@ -429,5 +452,43 @@ private final class PingBox: @unchecked Sendable {
 private extension Result where Failure == Error {
     init(catching body: () async throws -> Success) async {
         do { self = .success(try await body()) } catch { self = .failure(error) }
+    }
+}
+
+extension DevTools {
+    /// `--update`: the same download, checks and swap the app does, from the terminal.
+    fileprivate static func update(app: URL?, checkOnly: Bool) -> Int32 {
+        let target = app ?? Bundle.main.bundleURL
+        guard target.pathExtension == "app", let have = Updates.installedVersion(target) else {
+            print("✗ \(target.path) isn't an Exit app bundle (pass --app /path/to/Exit.app)")
+            return 2
+        }
+        let agent = "Exit/\(AppVersion.current ?? "dev") (macOS; cli)"
+        let done = DispatchSemaphore(value: 0)
+        var code: Int32 = 1
+        Task.detached {
+            defer { done.signal() }
+            do {
+                let r = try await Updates.latest(userAgent: agent)
+                guard r.version > have else { print("✓ \(target.path) is \(have), the newest version"); code = 0; return }
+                print("▸ \(r.version) is out (\(target.lastPathComponent) is \(have)): \(r.page.absoluteString)")
+                if checkOnly { code = 0; return }
+                if let why = Updates.blocker(for: target) { print("✗ " + why); return }
+                let dir = FileManager.default.temporaryDirectory.appendingPathComponent("exit-update-\(getpid())", isDirectory: true)
+                defer { try? FileManager.default.removeItem(at: dir) }
+                let archive = try await Updates.download(r, to: dir, userAgent: agent)
+                print("✓ downloaded \(r.archiveName), matches SHA256SUMS")
+                try Updates.install(archive, version: r.version, over: target)
+                print("✓ signature, notarization and version check out; \(target.path) is now \(r.version)")
+                if app == nil || target.standardizedFileURL == Bundle.main.bundleURL.standardizedFileURL {
+                    print("  quit and reopen Exit to use it")
+                }
+                code = 0
+            } catch {
+                print("✗ " + error.localizedDescription)
+            }
+        }
+        done.wait()
+        return code
     }
 }

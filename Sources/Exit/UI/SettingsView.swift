@@ -37,6 +37,7 @@ final class SettingsNavigation: ObservableObject {
 struct SettingsView: View {
     @EnvironmentObject var nav: SettingsNavigation
     @ObservedObject private var settings = Settings.shared
+    @ObservedObject private var submissions = SubmissionCenter.shared
 
     var body: some View {
         NavigationSplitView {
@@ -58,6 +59,11 @@ struct SettingsView: View {
             .navigationTitle(nav.tab.title)
         }
         .id(settings.language)
+        .sheet(item: $submissions.sheet) { item in
+            if let effect = EffectLibrary.shared.effect(id: item.id) {
+                SubmitSheet(effect: effect)
+            }
+        }
     }
 }
 
@@ -127,6 +133,7 @@ struct GeneralPane: View {
                            "每隔几秒重新截取当前窗口，App 自己关掉的窗口也能用上较新的画面。菜单栏的录屏指示可能会闪一下。"))
                 }
             }
+            UpdatesSection()
             Section {
                 LabeledContent(T("Windows sent off", "已送走的窗口"), value: "\(settings.playCount)")
             }
@@ -298,5 +305,72 @@ struct PermissionRow: View {
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Updates
+
+struct UpdatesSection: View {
+    @ObservedObject private var updater = Updater.shared
+
+    var body: some View {
+        Section(T("Updates", "软件更新")) {
+            LabeledContent(T("Version", "版本")) {
+                HStack(spacing: 10) {
+                    Text(AppVersion.current ?? "dev").monospacedDigit()
+                    if updater.isWorking { ProgressView().controlSize(.small) }
+                    Button(T("Check Now", "立即检查")) { Task { await updater.check(userInitiated: true) } }
+                        .disabled(updater.isWorking || !updater.enabled)
+                }
+            }
+            if let line = statusLine {
+                HStack {
+                    Text(line).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    if let r = updater.release {
+                        Button(T("What's New", "更新内容")) { NSWorkspace.shared.open(r.page) }.buttonStyle(.link)
+                        if case .installed = updater.state {
+                            Button(T("Relaunch", "重新打开")) { updater.relaunch() }
+                        } else if !updater.isWorking {
+                            Button(updater.blocker == nil ? T("Update", "更新") : T("Download", "下载")) { Task { await updater.update() } }
+                        }
+                    }
+                }
+            }
+            if let problem = updater.problem ?? (updater.release != nil ? updater.blocker : nil) {
+                Label(problem, systemImage: "exclamationmark.triangle.fill").font(.callout).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Toggle(T("Check for updates automatically", "自动检查更新"), isOn: $updater.checksAutomatically)
+                .disabled(!updater.enabled)
+            Toggle(isOn: $updater.installsAutomatically) {
+                Text(T("Install updates automatically", "自动安装更新"))
+                Text(T("Downloads in the background and installs while you're away from the Mac, or when Exit quits. Exit reopens by itself; the menu-bar icon blinks once.",
+                       "在后台下载，等你离开电脑一会儿或退出 Exit 时装上。Exit 会自己重新打开，菜单栏图标会闪一下。"))
+            }
+            .disabled(!updater.enabled || !updater.checksAutomatically)
+        }
+    }
+
+    private var statusLine: String? {
+        guard updater.enabled else {
+            return T("This copy wasn't downloaded from GitHub Releases, so it doesn't update itself.",
+                     "这份 Exit 不是从 GitHub Releases 下载的正式版本，不会自己更新。")
+        }
+        switch updater.state {
+        case .idle:
+            if updater.checking { return T("Checking…", "正在检查…") }
+            guard let last = updater.lastCheck else { return nil }
+            let ago = RelativeDateTimeFormatter().localizedString(for: last, relativeTo: Date())
+            return T("Exit is up to date (checked \(ago)).", "已经是最新版本（\(ago)检查过）。")
+        case .available(let r): return T("Exit \(r.version) is available.", "Exit \(r.version) 可以更新了。")
+        case .downloading(let r): return T("Downloading Exit \(r.version)…", "正在下载 Exit \(r.version)…")
+        case .ready(let r, _):
+            return updater.installsAutomatically && updater.checksAutomatically
+                ? T("Exit \(r.version) is downloaded and installs itself while you're away.", "Exit \(r.version) 已下载，会在你离开电脑时自动装上。")
+                : T("Exit \(r.version) is downloaded.", "Exit \(r.version) 已下载。")
+        case .installing(let r): return T("Installing Exit \(r.version)…", "正在安装 Exit \(r.version)…")
+        case .installed(let r): return T("Exit \(r.version) is installed. Relaunch to use it.", "Exit \(r.version) 已装好，重新打开后生效。")
+        }
     }
 }
