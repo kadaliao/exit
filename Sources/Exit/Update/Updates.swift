@@ -92,14 +92,41 @@ enum Updates {
 
     // MARK: Finding
 
-    /// The latest published release (GitHub's "latest" skips drafts and pre-releases).
+    /// The latest published release (GitHub's "latest" skips drafts and pre-releases). The API
+    /// allows 60 requests an hour per IP address without a token, which a shared network can use
+    /// up; then the release page's redirect to its tag says the same.
     static func latest(userAgent: String, session: URLSession = .shared) async throws -> Release {
-        var req = URLRequest(url: latestAPI, timeoutInterval: 30)
-        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        do {
+            var req = URLRequest(url: latestAPI, timeoutInterval: 30)
+            req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+            req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+            let (data, response) = try await session.data(for: req)
+            try check(response)
+            return try parse(data)
+        } catch UpdateError.http(let code) where code == 403 || code == 429 || code >= 500 {
+            return try await latestFromPage(userAgent: userAgent, session: session)
+        }
+    }
+
+    /// github.com/<repo>/releases/latest redirects to …/releases/tag/v<version>; the files sit at
+    /// fixed addresses under …/releases/download/v<version>/.
+    static func latestFromPage(userAgent: String, session: URLSession = .shared) async throws -> Release {
+        var req = URLRequest(url: releasesPage, timeoutInterval: 30)
+        req.httpMethod = "HEAD"
         req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        let (data, response) = try await session.data(for: req)
+        let (_, response) = try await session.data(for: req)
         try check(response)
-        return try parse(data)
+        guard let page = response.url, page.scheme == "https", page.host == "github.com",
+              page.pathComponents.count >= 2, page.pathComponents[page.pathComponents.count - 2] == "tag" else {
+            throw UpdateError.noRelease
+        }
+        let tag = page.lastPathComponent
+        guard let version = ReleaseVersion(tag) else { throw UpdateError.noRelease }
+        let plain = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
+        let name = "\(archivePrefix)\(plain).zip"
+        let base = URL(string: "https://github.com/\(repository)/releases/download/\(tag)/")!
+        return Release(version: version, page: page, archive: base.appendingPathComponent(name),
+                       archiveName: name, checksums: base.appendingPathComponent("SHA256SUMS"))
     }
 
     static func parse(_ data: Data) throws -> Release {

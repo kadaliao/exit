@@ -29,7 +29,7 @@ enum DevTools {
         }
         if cmd == "--update" {
             return update(app: value("--app").map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) },
-                          checkOnly: args.contains("--check"))
+                          checkOnly: args.contains("--check"), fromPage: args.contains("--page"))
         }
         if let dir = value("--effects-dir") {
             Paths.effectsDirOverride = URL(fileURLWithPath: dir, isDirectory: true).standardizedFileURL
@@ -457,7 +457,8 @@ private extension Result where Failure == Error {
 
 extension DevTools {
     /// `--update`: the same download, checks and swap the app does, from the terminal.
-    fileprivate static func update(app: URL?, checkOnly: Bool) -> Int32 {
+    /// `fromPage` skips the API and reads the release page's redirect (the fallback path).
+    fileprivate static func update(app: URL?, checkOnly: Bool, fromPage: Bool) -> Int32 {
         let target = app ?? Bundle.main.bundleURL
         guard target.pathExtension == "app", let have = Updates.installedVersion(target) else {
             print("✗ \(target.path) isn't an Exit app bundle (pass --app /path/to/Exit.app)")
@@ -469,7 +470,7 @@ extension DevTools {
         Task.detached {
             defer { done.signal() }
             do {
-                let r = try await Updates.latest(userAgent: agent)
+                let r = fromPage ? try await Updates.latestFromPage(userAgent: agent) : try await Updates.latest(userAgent: agent)
                 guard r.version > have else { print("✓ \(target.path) is \(have), the newest version"); code = 0; return }
                 print("▸ \(r.version) is out (\(target.lastPathComponent) is \(have)): \(r.page.absoluteString)")
                 if checkOnly { code = 0; return }
