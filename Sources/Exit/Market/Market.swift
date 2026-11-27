@@ -20,6 +20,8 @@ struct MarketEntry: Codable, Hashable {
     let preview: String?
     let sha256: String
     let sourceUrl: String?
+    /// When the effect joined the market (yyyy-mm-dd).
+    let added: String?
 
     var displayName: String { Lang.isChinese ? (nameZh ?? name) : name }
     var displayDescription: String? { Lang.isChinese ? (descriptionZh ?? description) : description }
@@ -27,6 +29,17 @@ struct MarketEntry: Codable, Hashable {
         (events ?? ["close", "quit", "minimize"]).compactMap(WindowEvent.init(key:)).sorted { $0.rawValue < $1.rawValue }
     }
     var isCompatible: Bool { requires.map(AppVersion.satisfies) ?? true }
+    /// Joined the market in the last two weeks.
+    var isNew: Bool {
+        guard let added, let day = Self.day.date(from: added) else { return false }
+        return Date().timeIntervalSince(day) < 14 * 86400
+    }
+    private static let day: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
     var checksum: String { sha256.lowercased() }
     /// The effect's page, if it's a web link.
     var webURL: URL? { URL.web(sourceUrl) }

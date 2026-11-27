@@ -156,15 +156,28 @@ enum DevTools {
             if let appearance = value("--appearance") {
                 app.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
             }
-            for tab in SettingsTab.allCases {
+            // Live thumbnails become still frames, which the snapshot can see. --tab market, --size 860x600
+            ThumbnailView.stillFrames = true
+            let size = value("--size").map { $0.split(separator: "x").compactMap { Double($0) } } ?? []
+            let (width, height) = size.count == 2 ? (size[0], size[1]) : (860, 600)
+            for tab in SettingsTab.allCases where value("--tab").map({ $0 == tab.rawValue }) ?? true {
                 let nav = SettingsNavigation()
                 nav.tab = tab
                 let host = NSHostingView(rootView: SettingsView().environmentObject(nav))
-                let w = NSWindow(contentRect: CGRect(x: -3000, y: -3000, width: 860, height: 600),
+                let w = NSWindow(contentRect: CGRect(x: -3000, y: -3000, width: width, height: height),
                                  styleMask: [.titled, .fullSizeContentView], backing: .buffered, defer: false)
                 w.contentView = host
                 w.orderFrontRegardless()
                 RunLoop.main.run(until: Date().addingTimeInterval(0.8))
+                if tab == .market {   // wait for the index and the previews
+                    let store = MainActor.assumeIsolated { MarketStore.shared }
+                    let deadline = Date().addingTimeInterval(15)
+                    while Date() < deadline, MainActor.assumeIsolated({
+                        store.loading || store.items.isEmpty
+                            || store.items.contains { $0.source.isOfficial && store.preview(for: $0) == nil && store.previewError(for: $0) == nil }
+                    }) { RunLoop.main.run(until: Date().addingTimeInterval(0.2)) }
+                    RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+                }
                 if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
                     host.cacheDisplay(in: host.bounds, to: rep)
                     let url = URL(fileURLWithPath: dir).appendingPathComponent("\(tab.rawValue).png")

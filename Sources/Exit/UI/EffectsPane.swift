@@ -129,6 +129,9 @@ struct EffectThumbnail: NSViewRepresentable {
     @ObservedObject var effect: Effect
     /// Change it to start the loop over (e.g. on hover).
     var replay = 0
+    /// The demo window's width and the x of its center, as fractions of the view's width.
+    var windowWidth: CGFloat = 0.62
+    var windowCenterX: CGFloat = 0.5
 
     private var restartKey: String { "\(effect.id)#\(effect.revision)#\(replay)" }
 
@@ -136,10 +139,12 @@ struct EffectThumbnail: NSViewRepresentable {
         let v = ThumbnailView()
         v.effect = effect
         v.restartKey = restartKey
+        v.place(width: windowWidth, centerX: windowCenterX)
         return v
     }
 
     func updateNSView(_ v: ThumbnailView, context: Context) {
+        v.place(width: windowWidth, centerX: windowCenterX)
         // Restart only when the effect or its code changed, not on every SwiftUI update.
         guard v.effect !== effect || v.restartKey != restartKey else { return }
         v.effect = effect
@@ -152,8 +157,14 @@ struct EffectThumbnail: NSViewRepresentable {
 /// on a background queue: a Metal layer that isn't being composited hands out no new drawables,
 /// and waiting for one on the main thread froze clicks in Settings for up to a second per frame.
 final class ThumbnailView: NSView {
-    var effect: Effect?
+    /// `--snapshot-ui`: draw one still frame into an ordinary layer, which a view snapshot can capture.
+    static var stillFrames = false
+
+    var effect: Effect? { didSet { if Self.stillFrames { needsLayout = true } } }
     var restartKey = ""
+    private var windowWidth: CGFloat = 0.62
+    private var windowCenterX: CGFloat = 0.5
+    private let stillLayer = CALayer()
     private let metalLayer = CAMetalLayer()
     private let windowLayer = CALayer()
     private let backdrop = CAGradientLayer()
@@ -171,8 +182,9 @@ final class ThumbnailView: NSView {
         super.init(frame: frame)
         wantsLayer = true
         backdrop.colors = [CGColor(red: 0.24, green: 0.36, blue: 0.55, alpha: 1), CGColor(red: 0.47, green: 0.32, blue: 0.52, alpha: 1)]
-        backdrop.startPoint = CGPoint(x: 0, y: 0)
-        backdrop.endPoint = CGPoint(x: 1, y: 1)
+        // Blue at the top left, violet at the bottom right, like the market's previews (layer y points up).
+        backdrop.startPoint = CGPoint(x: 0, y: 1)
+        backdrop.endPoint = CGPoint(x: 1, y: 0)
         layer?.addSublayer(backdrop)
         layer?.addSublayer(windowLayer)
         windowLayer.contentsGravity = .resize
@@ -183,6 +195,7 @@ final class ThumbnailView: NSView {
         metalLayer.isOpaque = false
         metalLayer.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
         layer?.addSublayer(metalLayer)
+        if Self.stillFrames { layer?.addSublayer(stillLayer) }
 
         useDemoWindow()
     }
@@ -213,10 +226,17 @@ final class ThumbnailView: NSView {
 
     func restart() { start = CACurrentMediaTime() }
 
+    func place(width: CGFloat, centerX: CGFloat) {
+        guard width != windowWidth || centerX != windowCenterX else { return }
+        windowWidth = width
+        windowCenterX = centerX
+        needsLayout = true
+    }
+
     private var windowRect: CGRect {
-        // Demo window at 62% of the width, centered (view coordinates, bottom-left origin).
-        let w = bounds.width * 0.62, h = w * 460 / 720
-        return CGRect(x: (bounds.width - w) / 2, y: (bounds.height - h) / 2, width: w, height: h)
+        // The demo window, vertically centered (view coordinates, bottom-left origin).
+        let w = bounds.width * windowWidth, h = w * 460 / 720
+        return CGRect(x: bounds.width * windowCenterX - w / 2, y: (bounds.height - h) / 2, width: w, height: h)
     }
 
     override func layout() {
@@ -225,9 +245,22 @@ final class ThumbnailView: NSView {
         CATransaction.setDisableActions(true)
         backdrop.frame = bounds
         metalLayer.frame = bounds
+        stillLayer.frame = bounds
         windowLayer.frame = windowRect
         CATransaction.commit()
         updateDrawableSize()
+        if Self.stillFrames { drawStill() }
+    }
+
+    private func drawStill() {
+        let scale = window?.backingScaleFactor ?? 2
+        let size = CGSize(width: (bounds.width * scale).rounded(), height: (bounds.height * scale).rounded())
+        guard let effect, let pipeline = effect.pipeline, size.width > 0, size.height > 0,
+              let off = OffscreenRenderer(width: Int(size.width), height: Int(size.height)) else { return }
+        let isOpen = effect.meta.events == [.open]
+        stillLayer.contents = off.render(pipeline, uniforms: uniforms(at: effect.meta.duration * 0.45, of: effect, size: size),
+                                         texture: texture)
+        windowLayer.isHidden = !isOpen
     }
 
     override func viewDidChangeBackingProperties() {
@@ -265,13 +298,12 @@ final class ThumbnailView: NSView {
     }
 
     @objc private func tick(_ link: CADisplayLink) {
-        guard !rendering, !visibleRect.isEmpty, !isHiddenOrHasHiddenAncestor,
+        guard !Self.stillFrames, !rendering, !visibleRect.isEmpty, !isHiddenOrHasHiddenAncestor,
               let effect, let pipeline = effect.pipeline else { return }
         let isOpen = effect.meta.events == [.open]
         let duration = effect.meta.duration
         let cycle = duration + 0.9
         let t = (CACurrentMediaTime() - start).truncatingRemainder(dividingBy: cycle)
-        let progress = min(t / duration, 1)
 
         // Closing effects replace the window; opening ones decorate it.
         CATransaction.begin()
@@ -279,7 +311,27 @@ final class ThumbnailView: NSView {
         windowLayer.isHidden = !isOpen && t < duration
         CATransaction.commit()
 
-        let size = metalLayer.drawableSize
+        let u = uniforms(at: t, of: effect, size: metalLayer.drawableSize)
+        rendering = true
+        let layer = metalLayer, texture = texture, uniforms = u
+        renderQueue.async { [weak self] in
+            if let drawable = layer.nextDrawable(), let cb = Renderer.shared.queue.makeCommandBuffer() {
+                let pass = MTLRenderPassDescriptor()
+                pass.colorAttachments[0].texture = drawable.texture
+                Renderer.shared.encode(pipeline, uniforms: uniforms, texture: texture, pass: pass, commandBuffer: cb)
+                EffectGuard.watch(cb, effect: effect)
+                cb.present(drawable)
+                cb.commit()
+            }
+            DispatchQueue.main.async { self?.rendering = false }
+        }
+    }
+
+    /// The uniforms for time `t` of the loop, on a drawable of `size` pixels.
+    private func uniforms(at t: Double, of effect: Effect, size: CGSize) -> ExitUniforms {
+        let isOpen = effect.meta.events == [.open]
+        let duration = effect.meta.duration
+        let progress = min(t / duration, 1)
         let px = size.width / max(bounds.width, 1)
         let r = windowRect
         var u = ExitUniforms()
@@ -300,19 +352,6 @@ final class ThumbnailView: NSView {
             // Pause on the intact window between loops.
             u.progress = 0
         }
-
-        rendering = true
-        let layer = metalLayer, texture = texture, uniforms = u
-        renderQueue.async { [weak self] in
-            if let drawable = layer.nextDrawable(), let cb = Renderer.shared.queue.makeCommandBuffer() {
-                let pass = MTLRenderPassDescriptor()
-                pass.colorAttachments[0].texture = drawable.texture
-                Renderer.shared.encode(pipeline, uniforms: uniforms, texture: texture, pass: pass, commandBuffer: cb)
-                EffectGuard.watch(cb, effect: effect)
-                cb.present(drawable)
-                cb.commit()
-            }
-            DispatchQueue.main.async { self?.rendering = false }
-        }
+        return u
     }
 }
