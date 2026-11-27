@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import CoreServices
+import CryptoKit
 import Metal
 
 /// Metadata parsed from the `// @key value` header of an effect file.
@@ -14,6 +15,8 @@ struct EffectMeta {
     /// Extra canvas around the window, in points. nil = the whole screen.
     var padding: CGFloat? = 160
     var events: Set<WindowEvent> = [.close, .quit, .minimize]
+    /// Oldest Exit version the effect works with (`@requires 0.3`).
+    var requires: String?
 
     var displayName: String { Lang.isChinese ? (nameZh ?? name) : name }
     var displayDescription: String? { Lang.isChinese ? (descriptionZh ?? description) : description }
@@ -40,6 +43,7 @@ struct EffectMeta {
             case "padding":
                 if value.lowercased() == "screen" { m.padding = nil }
                 else if let v = Double(value) { m.padding = CGFloat(min(max(v, 0), 2000)) }
+            case "requires": if !value.isEmpty { m.requires = value }
             case "events":
                 let set = Set(value.split(whereSeparator: { $0 == "," || $0 == " " }).compactMap { WindowEvent(key: String($0)) })
                 if !set.isEmpty { m.events = set }
@@ -50,11 +54,16 @@ struct EffectMeta {
     }
 }
 
+/// Where an effect file lives. A user file shadows a market one, which shadows a built-in one.
+enum EffectOrigin {
+    case user, market, builtIn
+}
+
 /// One loaded effect: its source, metadata and compiled pipeline (or compile error).
 final class Effect: Identifiable, ObservableObject {
     let id: String
     let url: URL
-    let isBuiltIn: Bool
+    let origin: EffectOrigin
     @Published var meta: EffectMeta
     @Published var pipeline: MTLRenderPipelineState?
     @Published var error: String?
@@ -62,15 +71,82 @@ final class Effect: Identifiable, ObservableObject {
     /// Bumped on every successful recompile so previews can restart.
     @Published var revision = 0
 
-    init(id: String, url: URL, isBuiltIn: Bool, meta: EffectMeta, modified: Date) {
+    init(id: String, url: URL, origin: EffectOrigin, meta: EffectMeta, modified: Date) {
         self.id = id
         self.url = url
-        self.isBuiltIn = isBuiltIn
+        self.origin = origin
         self.meta = meta
         self.modified = modified
     }
 
+    /// Consecutive frames over `EffectGuard.frameLimit` (main thread).
+    var slowFrames = 0
+    /// Hash of the source the current pipeline was built from, so the guard blames that version.
+    var sourceHash: String?
+    /// Switched off by `EffectGuard`; Settings offers to turn it back on.
+    @Published var stoppedByGuard = false
+
     var isReady: Bool { pipeline != nil }
+    var isBuiltIn: Bool { origin == .builtIn }
+}
+
+/// Effects Exit switched off because their GPU work hung or crawled, remembered by source hash
+/// so a hung shader doesn't hang the Mac again on the next launch. Editing the file clears it.
+enum EffectGuard {
+    private static let key = "disabledEffects"
+
+    /// A single frame slower than this stops the effect (normal frames take a few milliseconds).
+    static let frameLimit: Double = 0.25
+
+    static func hash(_ source: String) -> String {
+        SHA256.hash(data: Data(source.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    static func reason(id: String, source: String) -> String? {
+        guard let entry = (UserDefaults.standard.dictionary(forKey: key) as? [String: [String]])?[id],
+              entry.count == 2, entry[0] == hash(source) else { return nil }
+        return entry[1]
+    }
+
+    /// Remembers that this version of the effect hung or faulted the GPU.
+    static func remember(id: String, hash: String, reason: String) {
+        var all = UserDefaults.standard.dictionary(forKey: key) as? [String: [String]] ?? [:]
+        all[id] = [hash, reason]
+        UserDefaults.standard.set(all, forKey: key)
+    }
+
+    static func forget(id: String) {
+        var all = UserDefaults.standard.dictionary(forKey: key) as? [String: [String]] ?? [:]
+        all[id] = nil
+        UserDefaults.standard.set(all, forKey: key)
+    }
+
+    /// Watches one frame of an effect and switches the effect off when its own GPU work hangs or
+    /// faults, or keeps crawling. One slow frame can be another app hogging the GPU, so slow
+    /// frames only count after a few in a row; frames lost to someone else's GPU crash never count.
+    static func watch(_ cb: MTLCommandBuffer, effect: Effect) {
+        cb.addCompletedHandler { cb in
+            let seconds = cb.gpuEndTime - cb.gpuStartTime
+            let code = (cb.error as NSError?).flatMap { MTLCommandBufferError.Code(rawValue: UInt($0.code)) }
+            let fatal = cb.status == .error && (code == .timeout || code == .pageFault)
+            let slow = cb.status == .completed && seconds > frameLimit
+            DispatchQueue.main.async {
+                if fatal {
+                    EffectLibrary.shared.disable(effect, persist: true, reason: T(
+                        "Exit switched it off: the GPU gave up on it (\(cb.error?.localizedDescription ?? "timeout")).",
+                        "Exit 已停用它：GPU 处理它时出错（\(cb.error?.localizedDescription ?? "超时")）。"))
+                } else if cb.status == .completed {
+                    effect.slowFrames = slow ? effect.slowFrames + 1 : 0
+                    // Crawling can be the machine's fault (another app, thermal limits): this session only.
+                    if effect.slowFrames >= 3 {
+                        EffectLibrary.shared.disable(effect, persist: false, reason: T(
+                            String(format: "Exit switched it off: frames took %.0f ms on the GPU.", seconds * 1000),
+                            String(format: "Exit 已停用它：每帧在 GPU 上要花 %.0f 毫秒。", seconds * 1000)))
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Loads, compiles and hot-reloads effects from the bundle and the user's Effects folder.
@@ -101,14 +177,14 @@ final class EffectLibrary: ObservableObject {
         prelude = (try? String(contentsOf: Paths.builtInEffects.appendingPathComponent("prelude.metal"), encoding: .utf8)) ?? ""
         var list: [Effect] = []
         var seen = Set<String>()
-        // User effects shadow built-ins with the same file name.
-        for (dir, builtIn) in [(Paths.userEffects, false), (Paths.builtInEffects, true)] {
+        // User effects shadow market effects, which shadow built-ins with the same file name.
+        for (dir, origin) in Self.folders {
             for url in metalFiles(in: dir) {
                 let id = url.deletingPathExtension().lastPathComponent
                 guard !seen.contains(id) else { continue }
                 seen.insert(id)
                 let src = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-                let e = Effect(id: id, url: url, isBuiltIn: builtIn,
+                let e = Effect(id: id, url: url, origin: origin,
                                meta: EffectMeta.parse(source: src, fallbackName: id),
                                modified: modificationDate(url))
                 list.append(e)
@@ -118,9 +194,16 @@ final class EffectLibrary: ObservableObject {
         for e in list { compile(e, synchronously: synchronously) }
     }
 
+    /// Effect folders, highest priority first.
+    private static var folders: [(URL, EffectOrigin)] {
+        Paths.effectsDirOverride != nil
+            ? [(Paths.userEffects, .user), (Paths.builtInEffects, .builtIn)]
+            : [(Paths.userEffects, .user), (Paths.marketEffects, .market), (Paths.builtInEffects, .builtIn)]
+    }
+
     private static func sorted(_ list: [Effect]) -> [Effect] {
         list.sorted { a, b in
-            if a.isBuiltIn != b.isBuiltIn { return !a.isBuiltIn }   // user effects first
+            if a.isBuiltIn != b.isBuiltIn { return !a.isBuiltIn }   // user and market effects first
             return a.meta.displayName.localizedCompare(b.meta.displayName) == .orderedAscending
         }
     }
@@ -143,6 +226,9 @@ final class EffectLibrary: ObservableObject {
     struct CompileResult {
         let pipeline: MTLRenderPipelineState?
         let error: String?
+        /// The source was switched off by `EffectGuard` earlier.
+        var guarded = false
+        var sourceHash: String?
     }
 
     /// Compiles raw effect source (used by AI generation before anything is saved).
@@ -174,15 +260,70 @@ final class EffectLibrary: ObservableObject {
         return text.replacingOccurrences(of: "Compilation failed: \n\n", with: "")
     }
 
+    /// Compiles source that isn't in the library (market previews) on the compile queue.
+    func compileDetached(source: String, fileName: String, completion: @escaping (CompileResult) -> Void) {
+        compileQueue.async { [weak self] in
+            guard let self else { return }
+            let result = self.checked(source: source, id: (fileName as NSString).deletingPathExtension, fileName: fileName)
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+
+    /// Compiles unless the effect needs a newer Exit or was switched off for hanging the GPU.
+    private func checked(source: String, id: String, fileName: String) -> CompileResult {
+        let hash = EffectGuard.hash(source)
+        if let need = EffectMeta.parse(source: source, fallbackName: id).requires, !AppVersion.satisfies(need) {
+            return CompileResult(pipeline: nil, error: T("Needs Exit \(need) or later.", "需要 Exit \(need) 或更新版本。"), sourceHash: hash)
+        }
+        if let why = EffectGuard.reason(id: id, source: source) {
+            return CompileResult(pipeline: nil, error: why, guarded: true, sourceHash: hash)
+        }
+        var result = compile(source: source, fileName: fileName)
+        result.sourceHash = hash
+        return result
+    }
+
+    /// Stops an effect that hung or crawled on the GPU. A hang or fault is remembered for that
+    /// version of the file across launches; a crawl only for this session.
+    func disable(_ effect: Effect, persist: Bool, reason: String) {
+        guard effect.pipeline != nil else { return }
+        log.error("disabled \(effect.id, privacy: .public): \(reason, privacy: .public)")
+        if persist, let hash = effect.sourceHash { EffectGuard.remember(id: effect.id, hash: hash, reason: reason) }
+        effect.pipeline = nil
+        effect.error = reason
+        effect.stoppedByGuard = true
+        objectWillChange.send()
+    }
+
+    /// "Turn Back On" for an effect the guard stopped.
+    func reenable(_ effect: Effect) {
+        EffectGuard.forget(id: effect.id)
+        effect.slowFrames = 0
+        effect.stoppedByGuard = false
+        if effects.contains(where: { $0 === effect }) {
+            compile(effect)
+        } else if let src = try? String(contentsOf: effect.url, encoding: .utf8) {   // a market preview
+            compileDetached(source: src, fileName: effect.url.lastPathComponent) { result in
+                effect.pipeline = result.pipeline
+                effect.error = result.error
+                effect.sourceHash = result.sourceHash
+                if result.pipeline != nil { effect.revision += 1 }
+            }
+        }
+    }
+
     func compile(_ effect: Effect, synchronously: Bool = false) {
         let url = effect.url
         let work = { [weak self] in
             guard let self else { return }
             let src = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
             let meta = EffectMeta.parse(source: src, fallbackName: effect.id)
-            let result = self.compile(source: src, fileName: url.lastPathComponent)
+            let result = self.checked(source: src, id: effect.id, fileName: url.lastPathComponent)
             let apply = {
                 effect.meta = meta
+                effect.sourceHash = result.sourceHash
+                effect.stoppedByGuard = result.guarded
+                effect.slowFrames = 0
                 effect.pipeline = result.pipeline
                 effect.error = result.error
                 if result.pipeline != nil { effect.revision += 1 }
@@ -198,7 +339,7 @@ final class EffectLibrary: ObservableObject {
 
     func startWatching() {
         guard stream == nil else { return }
-        let paths = [Paths.userEffects.path, Paths.builtInEffects.path] as CFArray
+        let paths = Self.folders.map { $0.0.path } as CFArray
         var ctx = FSEventStreamContext(version: 0, info: Unmanaged.passUnretained(self).toOpaque(),
                                        retain: nil, release: nil, copyDescription: nil)
         let callback: FSEventStreamCallback = { _, info, _, _, _, _ in
@@ -221,13 +362,9 @@ final class EffectLibrary: ObservableObject {
         if newPrelude != prelude { loadAll(); return }
 
         var current: [String: URL] = [:]
-        var builtInIDs = Set<String>()
-        for url in metalFiles(in: Paths.builtInEffects) {
-            let id = url.deletingPathExtension().lastPathComponent
-            current[id] = url
-            builtInIDs.insert(id)
+        for (dir, _) in Self.folders.reversed() {   // lowest priority first, so higher ones win
+            for url in metalFiles(in: dir) { current[url.deletingPathExtension().lastPathComponent] = url }
         }
-        for url in metalFiles(in: Paths.userEffects) { current[url.deletingPathExtension().lastPathComponent] = url }
 
         let known = Dictionary(uniqueKeysWithValues: effects.map { ($0.id, $0) })
         let structureChanged = Set(known.keys) != Set(current.keys)

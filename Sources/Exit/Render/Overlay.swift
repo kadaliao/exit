@@ -127,7 +127,9 @@ final class OverlayPanel: NSPanel, MTKViewDelegate {
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 
     func draw(in view: MTKView) {
-        guard job != nil, let pipeline else { return }
+        guard let job, let pipeline else { return }
+        // Switched off mid-play by the GPU guard.
+        if !job.effect.isReady { stop(); return }
         let elapsed = CACurrentMediaTime() - start
         let progress = elapsed / duration
         if progress >= 1.0 {
@@ -138,7 +140,8 @@ final class OverlayPanel: NSPanel, MTKViewDelegate {
               let cb = Renderer.shared.queue.makeCommandBuffer() else { return }
         uniforms.progress = Float(progress)
         uniforms.time = Float(elapsed)
-        Renderer.shared.encode(pipeline, uniforms: uniforms, texture: job?.texture, pass: pass, commandBuffer: cb)
+        Renderer.shared.encode(pipeline, uniforms: uniforms, texture: job.texture, pass: pass, commandBuffer: cb)
+        EffectGuard.watch(cb, effect: job.effect)
         cb.present(drawable)
         cb.commit()
         frames += 1

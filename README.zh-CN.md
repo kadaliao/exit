@@ -15,6 +15,10 @@
   随机，或者关掉。
 - **特效就是文件。** 每个特效是 `~/Library/Application Support/Exit/Effects/` 里的一个
   Metal 着色器文件，保存即重新编译，发文件就能分享。写法见[编写指南](docs/EFFECTS.zh-CN.md)。
+- **特效市场。** “设置 → 特效市场”里是其他 Exit 用户做的特效（也可以[在网页上浏览](https://kadaliao.github.io/exit-effects/)）。
+  先在屏幕上试玩，喜欢就安装，之后会自动更新；也可以订阅，新上架的特效自动装上。
+  自己做了满意的特效，在它的卡片上点**投稿**：机器人会检查、渲染预览，并在
+  [exit-effects](https://github.com/kadaliao/exit-effects) 上自动提交 PR。
 - **一句话生成特效。** 输入“窗口像气球一样被戳破”，AI 模型写出着色器；Exit 编译后渲染
   测试帧，自动检查开头是否无缝衔接、结尾是否干净、速度够不够快，有问题就反馈给模型
   修改，最后直接播放给你看。可以直接用本机已登录的 Claude Code、Codex、Gemini CLI、
@@ -144,8 +148,10 @@ open build/Exit.app
 | 辅助功能（必需） | 感知窗口的打开、关闭、最小化；在 ⌘W / ⌘Q / ⌘M 和点击关闭按钮时短暂停留，拍下最后一帧。只检查这几个快捷键，其他按键原样放行。 |
 | 录屏（可选） | 让动画从窗口的真实画面开始。没有这个权限时，会用带 App 图标的卡片代替。 |
 
-窗口画面只在内存里停留几秒，不会写入磁盘，也不会发送到任何地方。除了你主动用 AI
-生成特效，Exit 不发起任何网络请求。
+窗口画面只在内存里停留几秒，不会写入磁盘，也不会发送到任何地方。Exit 只在两种情况下
+联网：你用 AI 生成特效时；以及特效市场——打开“设置 → 特效市场”时，或者装了市场特效
+（为了更新）、订阅了新特效时每隔几小时检查一次。市场请求只是下载公开的 `index.json`
+和特效文件，不会发送任何关于你的信息。
 
 ## 写特效
 
@@ -155,7 +161,10 @@ open build/Exit.app
 Exit.app/Contents/MacOS/Exit --check                       # 编译全部特效
 Exit.app/Contents/MacOS/Exit --validate --only my-effect   # 检查无缝开头、干净结尾、性能
 Exit.app/Contents/MacOS/Exit --render-sheet out.png --only my-effect
+Exit.app/Contents/MacOS/Exit --market list                 # 还有 install ID、uninstall ID
 ```
+
+加上 `--effects-dir 目录` 可以只测试那个目录里的文件，不受你自己的特效干扰。
 
 ## 许可
 

@@ -116,6 +116,11 @@ entrance too.
 - **Effects are just files.** Each effect is one Metal shader in
   `~/Library/Application Support/Exit/Effects/`. Edit it and it recompiles the moment you
   save. Share it by sending the file. See the [authoring guide](docs/EFFECTS.md).
+- **An effect market.** Settings → Market lists effects made by other Exit users
+  ([browse them on the web](https://kadaliao.github.io/exit-effects/)). Try one on screen,
+  install it, and it stays up to date; or subscribe and new effects arrive by themselves.
+  Made one you like? Click **Submit** on its card: a bot checks it, renders a preview and
+  opens a pull request on [exit-effects](https://github.com/kadaliao/exit-effects).
 - **Describe an effect, get an effect.** Type "the window pops like a balloon" and an AI
   model writes the shader. Exit compiles it, renders test frames to check it starts
   seamlessly, ends cleanly and runs fast, sends any problems back to the model, and plays
@@ -152,8 +157,10 @@ open build/Exit.app
 | Screen Recording (optional) | So the animation starts from the window's real picture. Without it Exit animates a card with the app's icon. |
 
 Window pictures live in memory for a few seconds and are never written to disk or sent
-anywhere. Exit makes no network requests, except when you ask it to generate an effect
-with AI.
+anywhere. Exit makes network requests only when you generate an effect with AI, and for
+the effect market: when you open Settings → Market, and every few hours if you have
+installed market effects (to update them) or subscribed to new ones. Those requests just
+download the market's public `index.json` and effect files; nothing about you is sent.
 
 ## Making effects
 
@@ -179,7 +186,10 @@ Exit.app/Contents/MacOS/Exit --check                       # compile everything
 Exit.app/Contents/MacOS/Exit --validate --only my-effect   # seamless start, clean end, speed
 Exit.app/Contents/MacOS/Exit --render-sheet out.png --only my-effect
 Exit.app/Contents/MacOS/Exit --bench
+Exit.app/Contents/MacOS/Exit --market list                 # also: install ID, uninstall ID
 ```
+
+Add `--effects-dir DIR` to test the files in a folder without your own effects in the way.
 
 ## How it works
 

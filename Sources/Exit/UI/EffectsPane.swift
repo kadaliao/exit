@@ -17,6 +17,7 @@ struct EffectsPane: View {
                            "共 \(library.effects.count) 个特效 · 每个都是一个可以直接修改的 Metal 文件。"))
                         .foregroundStyle(.secondary)
                     Spacer()
+                    Button { nav.tab = .market } label: { Label(T("Market", "特效市场"), systemImage: "storefront") }
                     Button { nav.tab = .ai } label: { Label(T("Create with AI", "AI 生成"), systemImage: "wand.and.stars") }
                     Button { NSWorkspace.shared.open(Paths.userEffects) } label: { Label(T("Folder", "文件夹"), systemImage: "folder") }
                     Button {
@@ -55,8 +56,14 @@ struct EffectCard: View {
             ZStack {
                 if let error = effect.error {
                     ScrollView {
-                        Text(error).font(.system(size: 10, design: .monospaced)).foregroundStyle(.red)
-                            .frame(maxWidth: .infinity, alignment: .leading).padding(8)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(error).font(.system(size: 10, design: .monospaced)).foregroundStyle(.red)
+                            if effect.stoppedByGuard {
+                                Button(T("Turn Back On", "重新启用")) { EffectLibrary.shared.reenable(effect) }
+                                    .controlSize(.small)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(8)
                     }
                     .background(Color.red.opacity(0.06))
                 } else {
@@ -71,9 +78,10 @@ struct EffectCard: View {
 
             HStack(spacing: 6) {
                 Text(effect.meta.displayName).font(.headline).lineLimit(1)
-                if !effect.isBuiltIn {
-                    Text(T("Custom", "自定义")).font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
-                        .background(Capsule().fill(Color.accentColor.opacity(0.18)))
+                if effect.origin != .builtIn {
+                    Text(effect.origin == .market ? T("Market", "市场") : T("Custom", "自定义"))
+                        .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(Capsule().fill((effect.origin == .market ? Color.green : Color.accentColor).opacity(0.18)))
                 }
                 Spacer()
                 ForEach(effect.meta.events.sorted { $0.rawValue < $1.rawValue }) { e in
@@ -88,11 +96,16 @@ struct EffectCard: View {
                 Button { ExitEngine.shared.preview(effect) } label: { Image(systemName: "play.fill") }
                     .help(T("Play on screen", "在屏幕上播放")).disabled(!effect.isReady)
                 Button { edit() } label: { Image(systemName: "pencil") }
-                    .help(effect.isBuiltIn ? T("Copy to your folder and edit", "复制到你的文件夹并编辑") : T("Edit", "编辑"))
+                    .help(effect.origin == .user ? T("Edit", "编辑") : T("Copy to your folder and edit", "复制到你的文件夹并编辑"))
                 Button { NSWorkspace.shared.activateFileViewerSelecting([effect.url]) } label: { Image(systemName: "folder") }
                     .help(T("Show in Finder", "在访达中显示"))
-                if !effect.isBuiltIn {
+                if effect.origin == .user {
+                    Button { MarketSubmit.submit(effect) } label: { Image(systemName: "square.and.arrow.up") }
+                        .help(T("Submit to the market…", "投稿到特效市场…")).disabled(!effect.isReady)
                     Button { trash() } label: { Image(systemName: "trash") }.help(T("Move to Trash", "移到废纸篓"))
+                } else if effect.origin == .market {
+                    Button { MarketStore.shared.uninstall(id: effect.id) } label: { Image(systemName: "trash") }
+                        .help(T("Uninstall", "卸载"))
                 }
             }
             .buttonStyle(.borderless)
@@ -103,7 +116,7 @@ struct EffectCard: View {
 
     private func edit() {
         var url = effect.url
-        if effect.isBuiltIn, let copy = EffectLibrary.shared.duplicateToUserFolder(effect) { url = copy }
+        if effect.origin != .user, let copy = EffectLibrary.shared.duplicateToUserFolder(effect) { url = copy }
         NSWorkspace.shared.open(url)
     }
 
@@ -297,6 +310,7 @@ final class ThumbnailView: NSView {
                 let pass = MTLRenderPassDescriptor()
                 pass.colorAttachments[0].texture = drawable.texture
                 Renderer.shared.encode(pipeline, uniforms: uniforms, texture: texture, pass: pass, commandBuffer: cb)
+                EffectGuard.watch(cb, effect: effect)
                 cb.present(drawable)
                 cb.commit()
             }

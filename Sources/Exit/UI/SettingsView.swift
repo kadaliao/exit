@@ -4,13 +4,14 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum SettingsTab: String, CaseIterable, Identifiable {
-    case general, effects, ai, rules, permissions
+    case general, effects, market, ai, rules, permissions
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .general: T("General", "通用")
         case .effects: T("Effects", "特效")
+        case .market: T("Market", "特效市场")
         case .ai: T("Create with AI", "AI 生成")
         case .rules: T("Rules", "规则")
         case .permissions: T("Permissions", "权限")
@@ -21,6 +22,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         switch self {
         case .general: "gearshape"
         case .effects: "sparkles.rectangle.stack"
+        case .market: "storefront"
         case .ai: "wand.and.stars"
         case .rules: "line.3.horizontal.decrease.circle"
         case .permissions: "lock.shield"
@@ -47,6 +49,7 @@ struct SettingsView: View {
                 switch nav.tab {
                 case .general: GeneralPane()
                 case .effects: EffectsPane()
+                case .market: MarketPane()
                 case .ai: AIPane()
                 case .rules: RulesPane()
                 case .permissions: PermissionsPane()

@@ -51,6 +51,13 @@ final class Settings: ObservableObject {
     /// low / medium / high — how hard the model thinks before writing the shader.
     @Published var aiEffort: String { didSet { d.set(aiEffort, forKey: "aiEffort") } }
     var playCount: Int { didSet { d.set(playCount, forKey: "playCount") } }
+    /// Extra market index URLs; the official market is always included.
+    @Published var marketSources: [String] { didSet { d.set(marketSources, forKey: "marketSources") } }
+    /// Subscribed: install effects that appear in a market from now on.
+    @Published var marketAutoInstall: Bool { didSet { d.set(marketAutoInstall, forKey: "marketAutoInstall") } }
+    @Published var marketAutoUpdate: Bool { didSet { d.set(marketAutoUpdate, forKey: "marketAutoUpdate") } }
+    /// Market items already listed once ("<source>#<id>", plus "<source>#" per source).
+    var marketSeen: Set<String> { didSet { save(marketSeen, "marketSeen") } }
 
     private init() {
         d.register(defaults: [
@@ -61,6 +68,8 @@ final class Settings: ObservableObject {
             "minWindowSize": 140.0,
             "respectReduceMotion": true,
             "aiEffort": "medium",
+            "marketAutoInstall": false,
+            "marketAutoUpdate": true,
         ])
         enabled = d.bool(forKey: "enabled")
         language = AppLanguage(rawValue: d.string(forKey: "language") ?? "") ?? .system
@@ -87,6 +96,10 @@ final class Settings: ObservableObject {
         aiEffort = d.string(forKey: "aiEffort") ?? "medium"
         excludedApps = d.stringArray(forKey: "excludedApps") ?? []
         playCount = d.integer(forKey: "playCount")
+        marketSources = d.stringArray(forKey: "marketSources") ?? []
+        marketAutoInstall = d.bool(forKey: "marketAutoInstall")
+        marketAutoUpdate = d.bool(forKey: "marketAutoUpdate")
+        marketSeen = Settings.load(Set<String>.self, "marketSeen", d) ?? []
         shuffleExcluded = Settings.load(Set<String>.self, "shuffleExcluded", d) ?? []
         assignments = Settings.load([WindowEvent: Assignment].self, "assignments", d) ?? [
             .close: .random,

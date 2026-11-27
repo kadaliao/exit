@@ -196,7 +196,8 @@ final class EffectGenerator: ObservableObject {
     // MARK: Validation
 
     /// Compiles and renders test frames. Returns human-readable problems (empty = good).
-    nonisolated static func validate(_ code: String) -> [String] {
+    /// `budgetMs` is the GPU time allowed per Retina frame; CI machines are slower and pass more.
+    nonisolated static func validate(_ code: String, budgetMs: Double = 7) -> [String] {
         let lib = EffectLibrary.shared
         let result = lib.compile(source: code, fileName: "effect.metal")
         guard let pipeline = result.pipeline else {
@@ -291,8 +292,8 @@ final class EffectGenerator: ObservableObject {
             ub.win = SIMD4(Float(bigW - 1440) / 2, Float(bigH - 920) / 2, 1440, 920)
             ub.corner = Float(Images.demoCorner * 2)
             let ms = big.benchmark(pipeline, uniforms: ub, texture: tex, frames: 12)
-            if ms > 7 {
-                problems.append(String(format: "Too slow: %.1f ms per frame at %dx%d on this Mac (budget 7 ms). Shorten loops and skip work early.", ms, bigW, bigH))
+            if ms > budgetMs {
+                problems.append(String(format: "Too slow: %.1f ms per frame at %dx%d on this Mac (budget %.0f ms). Shorten loops and skip work early.", ms, bigW, bigH, budgetMs))
             }
         }
         return problems

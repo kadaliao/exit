@@ -122,8 +122,28 @@ enum Paths {
         return url
     }()
 
-    static let userEffects: URL = {
+    /// Set by `--effects-dir` (CI): read user effects from there and ignore installed market effects.
+    nonisolated(unsafe) static var effectsDirOverride: URL?
+
+    static var userEffects: URL { effectsDirOverride ?? defaultUserEffects }
+
+    private static let defaultUserEffects: URL = {
         let url = support.appendingPathComponent("Effects", isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }()
+
+    /// Effects installed from a market. Exit manages this folder; edits go to a copy in `userEffects`.
+    static let marketEffects: URL = {
+        let url = support.appendingPathComponent("Market", isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }()
+
+    /// Downloaded market indexes and effect sources (safe to delete).
+    static let marketCache: URL = {
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        let url = base.appendingPathComponent("io.github.kadaliao.Exit/Market", isDirectory: true)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }()
@@ -149,6 +169,28 @@ enum Paths {
         }
         return builtInEffects.deletingLastPathComponent().appendingPathComponent("docs/EFFECTS.md")
     }()
+}
+
+/// Exit's own version, for `@requires`.
+enum AppVersion {
+    /// nil when run from source without an app bundle: then every effect is allowed.
+    static let current: String? = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+
+    /// Whether this copy of Exit is at least `version` ("0.3", "0.3.0", "1.2.10").
+    static func satisfies(_ version: String) -> Bool {
+        guard let current else { return true }
+        return compare(current, version) != .orderedAscending
+    }
+
+    static func compare(_ a: String, _ b: String) -> ComparisonResult {
+        func parts(_ s: String) -> [Int] { s.split(separator: ".").map { Int($0.prefix { $0.isNumber }) ?? 0 } }
+        let x = parts(a), y = parts(b)
+        for i in 0..<max(x.count, y.count) {
+            let l = i < x.count ? x[i] : 0, r = i < y.count ? y[i] : 0
+            if l != r { return l < r ? .orderedAscending : .orderedDescending }
+        }
+        return .orderedSame
+    }
 }
 
 extension CGRect {

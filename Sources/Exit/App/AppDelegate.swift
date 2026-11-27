@@ -40,6 +40,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
 
+        MainActor.assumeIsolated { MarketStore.shared.startAutoRefresh() }
+
         if AX.isTrusted() {
             ExitEngine.shared.start()
         } else {
@@ -154,6 +156,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ai.target = self
         menu.addItem(ai)
 
+        let market = NSMenuItem(title: T("Effect Market…", "特效市场…"), action: #selector(openMarket), keyEquivalent: "")
+        market.image = NSImage(systemSymbolName: "storefront", accessibilityDescription: nil)
+        market.target = self
+        menu.addItem(market)
+
         let folder = NSMenuItem(title: T("Open Effects Folder", "打开特效文件夹"), action: #selector(openFolder), keyEquivalent: "")
         folder.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
         folder.target = self
@@ -210,6 +217,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func openFolder() { NSWorkspace.shared.open(Paths.userEffects) }
     @objc private func openAI() { openSettings(tab: .ai) }
+    @objc private func openMarket() { openSettings(tab: .market) }
     @objc private func openPermissions() { openSettings(tab: .permissions) }
     @objc private func openSettingsAction() { openSettings(tab: nil) }
 

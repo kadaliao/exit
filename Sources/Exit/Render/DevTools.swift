@@ -5,18 +5,32 @@ import SwiftUI
 /// Command-line helpers for effect authors and CI:
 ///   Exit --check                          compile every effect, print errors
 ///   Exit --render-sheet out.png [--only a,b] [--frames 6] [--event open] [--placeholder]
-///   Exit --bench                          GPU time per frame at Retina size
+///   Exit --bench [--max-ms 20]            GPU time per frame at Retina size
+///   Exit --validate [--budget 7]          the AI generator's checks (seamless start, clean end, speed)
+///   Exit --version
+///   Exit --market [list | update | install ID | uninstall ID]   the effect market, from the terminal
+/// Add `--effects-dir DIR` to read effects from DIR instead of your own folder (installed market
+/// effects are skipped too), so CI and reviewers test exactly the files in front of them.
 enum DevTools {
-    static func run(_ args: [String]) -> Int32? {
-        guard let cmd = args.first(where: { $0.hasPrefix("--") }),
-              ["--check", "--render-sheet", "--bench", "--render-frames", "--render-sequence", "--validate", "--generate", "--snapshot-ui", "--ai-ping"].contains(cmd) else { return nil }
-        let lib = EffectLibrary.shared
-        lib.loadAll(synchronously: true)
+    static let commands = ["--check", "--render-sheet", "--bench", "--render-frames", "--render-sequence", "--validate",
+                           "--generate", "--snapshot-ui", "--ai-ping", "--version", "--market"]
 
+    static func run(_ args: [String]) -> Int32? {
+        guard let cmd = args.first(where: { commands.contains($0) }) else { return nil }
+        if cmd == "--version" {
+            print(AppVersion.current ?? "dev")
+            return 0
+        }
         func value(_ flag: String) -> String? {
             guard let i = args.firstIndex(of: flag), i + 1 < args.count else { return nil }
             return args[i + 1]
         }
+        if let dir = value("--effects-dir") {
+            Paths.effectsDirOverride = URL(fileURLWithPath: dir, isDirectory: true).standardizedFileURL
+        }
+        let lib = EffectLibrary.shared
+        lib.loadAll(synchronously: true)
+
         var effects = lib.effects
         if let only = value("--only") {
             let ids = Set(only.split(separator: ",").map(String.init))
@@ -160,12 +174,17 @@ enum DevTools {
             }
             return 0
 
+        case "--market":
+            let i = args.firstIndex(of: "--market")!
+            let rest = Array(args[(i + 1)...].prefix { !$0.hasPrefix("--") })
+            return MainActor.assumeIsolated { market(rest) }
+
         case "--validate":
             // Runs the same automatic checks the AI generator uses.
             var failed = 0
             for e in effects {
                 let src = (try? String(contentsOf: e.url, encoding: .utf8)) ?? ""
-                let problems = EffectGenerator.validate(src)
+                let problems = EffectGenerator.validate(src, budgetMs: Double(value("--budget") ?? "") ?? 7)
                 if problems.isEmpty { print("✓ \(e.id)") } else {
                     failed += 1
                     print("✗ \(e.id)"); problems.forEach { print("   - \($0)") }
@@ -230,6 +249,8 @@ enum DevTools {
             return failed == 0 ? 0 : 1
 
         case "--bench":
+            let maxMs = value("--max-ms").flatMap(Double.init)
+            var slow = 0
             let screen = CGSize(width: 2560, height: 1600)
             let win = CGSize(width: 1440, height: 920)
             guard let snap = Images.demoWindow(size: CGSize(width: 720, height: 460), scale: 2),
@@ -248,12 +269,63 @@ enum DevTools {
                 u.corner = Float(Images.demoCorner * 2)
                 u.seed = 0.37
                 let ms = off.benchmark(ps, uniforms: u, texture: tex)
-                print(String(format: "%@ %-22@ %6.2f ms/frame  (%dx%d)", ms > 8 ? "⚠︎" : "✓", e.id as NSString, ms, cw, ch))
+                let over = maxMs.map { ms > $0 } ?? false
+                if over { slow += 1 }
+                print(String(format: "%@ %-22@ %6.2f ms/frame  (%dx%d)", over ? "✗" : ms > 8 ? "⚠︎" : "✓", e.id as NSString, ms, cw, ch))
             }
-            return 0
+            return slow == 0 ? 0 : 1
 
         default:
             return nil
+        }
+    }
+
+    @MainActor
+    private static func market(_ args: [String]) -> Int32 {
+        let store = MarketStore.shared
+        func wait(_ work: @escaping @MainActor () async -> Void) {
+            var done = false
+            Task { @MainActor in await work(); done = true }
+            while !done { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
+        }
+        let verb = args.first ?? "list"
+        // Only "update" does what the app does in the background (updates, subscriptions).
+        wait { await store.refresh(automatic: verb == "update") }
+        for (source, error) in store.errors { print("✗ \(source): \(error)") }
+        switch verb {
+        case "update":
+            let names = store.autoInstalled
+            print(names.isEmpty ? "up to date" : "installed: " + names.joined(separator: ", "))
+            fallthrough
+        case "list":
+            for item in store.items {
+                let status: String = switch store.status(of: item) {
+                case .notInstalled: "-"
+                case .installed: "installed"
+                case .updateAvailable: "update available"
+                case .incompatible(let v): "needs \(v)"
+                case .otherSource: "installed from another source"
+                }
+                print(item.entry.id.padding(toLength: 20, withPad: " ", startingAt: 0) + " "
+                      + item.entry.name.padding(toLength: 24, withPad: " ", startingAt: 0) + " " + status)
+            }
+            return store.errors.isEmpty ? 0 : 1
+        case "install", "uninstall":
+            guard args.count > 1 else { print("usage: --market \(verb) ID"); return 2 }
+            if verb == "uninstall" {
+                guard store.uninstall(id: args[1]) else { print("not a market effect id: \(args[1])"); return 2 }
+                print("uninstalled \(args[1])")
+                return 0
+            }
+            guard let item = store.items.first(where: { $0.entry.id == args[1] }) else { print("not in the market: \(args[1])"); return 1 }
+            var failure: Error?
+            wait { do { try await store.install(item) } catch { failure = error } }
+            if let failure { print("✗ \(failure.localizedDescription)"); return 1 }
+            print("installed \(item.entry.id) → \(Paths.marketEffects.path)")
+            return 0
+        default:
+            print("usage: --market [list | update | install ID | uninstall ID]")
+            return 2
         }
     }
 

@@ -5,7 +5,7 @@
 一个 Exit 特效就是一个 `.metal` 文件。把它放进
 `~/Library/Application Support/Exit/Effects/`，菜单里马上就能看到。
 每次保存都会立即重新编译，编译错误显示在“设置 → 特效”里。
-和内置特效同名的文件会替换掉那个内置特效。
+和内置特效或已安装的市场特效同名的文件会替换掉它。
 
 ## 约定
 
@@ -53,6 +53,8 @@ float4 effect(float2 p, constant Exit& u, texture2d<float> tex) {
 | `@duration` | 时长（秒），0.15 – 6 | 0.7 |
 | `@padding` | 窗口四周额外的画布宽度（点）；写 `screen` 表示整个屏幕 | 160 |
 | `@events` | `close`、`quit`、`minimize`、`open` 中的任意几个 | `close, quit, minimize` |
+| `@author` | 作者名，在特效市场里显示 | 无 |
+| `@requires` | 能运行这个特效的最低 Exit 版本，比如 `0.3`；更老的版本会跳过它 | 无 |
 
 ## Uniform 参数：`constant Exit& u`
 
@@ -141,4 +143,13 @@ float4 effect(float2 p, constant Exit& u, texture2d<float> tex) {
 
 * “设置 → 特效 → 预览”会在演示窗口上播放它。
 * 在终端里：`Exit.app/Contents/MacOS/Exit --check` 编译所有特效并输出错误；
+  `--validate --only my-effect` 跑一遍和特效市场相同的检查；
   `--render-sheet out.png --only my-effect` 渲染一排逐帧画面。
+
+## 分享出去
+
+在“设置 → 特效”里，点你那个特效卡片上的**投稿**（分享图标）。Exit 会先跑一遍检查，复制代码，
+再打开 [exit-effects](https://github.com/kadaliao/exit-effects/issues/new?template=submit-effect.yml)
+上的投稿表单。机器人会编译、检查首尾帧和性能、渲染预览，然后自动提交 PR；审核通过后，
+所有人都能在“设置 → 特效市场”里看到它。记得写上 `@name`、`@description` 和 `@author`
+（能写 `.zh` 中文版更好）。市场里的特效以 MIT 许可证发布。

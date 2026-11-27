@@ -5,7 +5,7 @@
 An Exit effect is one `.metal` file. Drop it into
 `~/Library/Application Support/Exit/Effects/` and it shows up in the menu immediately.
 Every save recompiles it on the fly; compile errors are shown in Settings → Effects.
-A file with the same name as a built-in effect replaces it.
+A file with the same name as a built-in or installed market effect replaces it.
 
 ## The contract
 
@@ -53,6 +53,8 @@ The file starts with `// @key value` comment lines:
 | `@duration` | seconds, 0.15 – 6 | 0.7 |
 | `@padding` | extra canvas around the window in points, or `screen` for the full screen | 160 |
 | `@events` | any of `close`, `quit`, `minimize`, `open` | `close, quit, minimize` |
+| `@author` | your name, shown in the market | — |
+| `@requires` | oldest Exit version the effect works with, e.g. `0.3`; older versions skip it | — |
 
 ## Uniforms: `constant Exit& u`
 
@@ -144,4 +146,15 @@ float4 effect(float2 p, constant Exit& u, texture2d<float> tex) {
 
 * Settings → Effects → Preview plays it on a demo window.
 * From a terminal: `Exit.app/Contents/MacOS/Exit --check` compiles everything and prints
-  errors; `--render-sheet out.png --only my-effect` renders a strip of frames.
+  errors; `--validate --only my-effect` runs the same checks as the market;
+  `--render-sheet out.png --only my-effect` renders a strip of frames.
+
+## Sharing it
+
+Click **Submit** (the share icon) on your effect's card in Settings → Effects. Exit runs
+the checks, copies the code and opens a form on
+[exit-effects](https://github.com/kadaliao/exit-effects/issues/new?template=submit-effect.yml).
+A bot compiles it, checks the first and last frames and the speed, renders a preview, and
+opens a pull request; after a review it's in everyone's Settings → Market. Give it a
+`@name`, `@description` and `@author` (and the `.zh` lines if you can). Effects in the
+market are MIT licensed.
