@@ -166,5 +166,5 @@ Coding agents (Claude Code, Codex, …) can do the same; the
 Exit.app/Contents/MacOS/Exit --market submit my-effect --wait
 ```
 
-After a review it's in everyone's Settings → Market. Give it a `@name`, `@description` and
+Once the checks pass, the bot merges it and it's in everyone's Settings → Market within minutes. Give it a `@name`, `@description` and
 `@author` (and the `.zh` lines if you can). Effects in the market are MIT licensed.

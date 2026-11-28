@@ -162,5 +162,5 @@ coding agent（Claude Code、Codex 等）也能帮你投稿，
 Exit.app/Contents/MacOS/Exit --market submit my-effect --wait
 ```
 
-审核通过后，所有人都能在“设置 → 特效市场”里看到它。记得写上 `@name`、`@description` 和
+检查通过后机器人会直接合并，几分钟内所有人都能在“设置 → 特效市场”里看到它。记得写上 `@name`、`@description` 和
 `@author`（能写 `.zh` 中文版更好）。市场里的特效以 MIT 许可证发布。

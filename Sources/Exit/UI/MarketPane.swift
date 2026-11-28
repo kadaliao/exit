@@ -288,7 +288,7 @@ struct MarketCard: View {
 
     private var entry: MarketEntry { item.entry }
     private var preview: Effect? { store.preview(for: item) }
-    /// Effects from the official market are reviewed; others only run when you ask.
+    /// Effects from the official market passed its checks; others only run when you ask.
     private var autoPreview: Bool { item.source.isOfficial }
 
     var body: some View {

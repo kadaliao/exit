@@ -20,7 +20,8 @@ final class SubmissionCenter: ObservableObject {
     enum Status: String, Codable {
         /// The bot hasn't answered yet.
         case checking
-        /// The bot's checks passed; the maintainer reviews the pull request.
+        /// The bot's checks passed but it didn't merge (it replaces someone else's effect): the
+        /// maintainer reviews the pull request. Otherwise the bot merges right away (`merged`).
         case accepted
         case needsChanges
         /// The pull request was merged: the effect is in the market.

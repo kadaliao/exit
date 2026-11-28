@@ -337,8 +337,8 @@ struct SubmissionStatusView: View {
             T("It renders a preview on a GitHub Mac and answers in about five minutes. You can close this; Exit keeps watching and shows the answer on the effect's card.",
               "它会在 GitHub 的 Mac 上渲染预览，大约五分钟后回复。可以先关掉这个窗口，Exit 会继续留意，结果显示在特效卡片上。")
         case .accepted:
-            T("The maintainer reviews the pull request next. Once it's merged, the effect reaches everyone's Market within minutes.",
-              "接下来由维护者审核 PR。合并后几分钟内，所有人的特效市场里都能看到它。")
+            T("This one waits for the maintainer, usually because it replaces an effect someone else added; the bot's reply says why. Once it's merged, the effect reaches everyone's Market within minutes.",
+              "这份投稿要等维护者处理，通常是因为它会替换别人添加的特效，原因见机器人的回复。合并后几分钟内，所有人的特效市场里都能看到它。")
         case .needsChanges:
             T("Fix what's marked below in the file, then press Submit again: it updates the same submission.",
               "按下面标出的问题改好文件，再点一次「投稿」，会更新同一份投稿。")

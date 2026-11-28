@@ -179,6 +179,8 @@ enum MarketSubmit {
     struct BotReply {
         let body: String
         var passed: Bool { body.contains("✅ All checks passed") }
+        /// The bot merged it right away: a new effect, or an update to your own.
+        var merged: Bool { passed && body.contains("Merged in #") }
     }
 
     /// The bot's answer on issue `number` written after `since`, if there is one yet.
@@ -264,7 +266,9 @@ enum MarketSubmit {
             Thread.sleep(forTimeInterval: 15)
             guard let reply = try? blocking({ try await botReply(sent.number, since: sentAt, api: api) }) else { continue }
             print("\n" + reply.body + "\n")
-            print(reply.passed ? "✓ the bot accepted it; the maintainer reviews the pull request next" : "✗ the bot found problems; fix them and run this again")
+            print(reply.merged ? "✓ the bot merged it: it reaches everyone's Market within minutes"
+                  : reply.passed ? "✓ the bot accepted it; the maintainer reviews the pull request next"
+                  : "✗ the bot found problems; fix them and run this again")
             return reply.passed ? 0 : 1
         }
         print("✗ no answer from the bot after 20 minutes; look at \(sent.url)")
