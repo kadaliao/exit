@@ -166,5 +166,11 @@ Coding agents (Claude Code, Codex, …) can do the same; the
 Exit.app/Contents/MacOS/Exit --market submit my-effect --wait
 ```
 
-Once the checks pass, the bot merges it and it's in everyone's Settings → Market within minutes. Give it a `@name`, `@description` and
-`@author` (and the `.zh` lines if you can). Effects in the market are MIT licensed.
+Once the checks pass, the bot merges it and it's in everyone's Settings → Market within
+minutes. Give it a `@name`, `@description` and `@author` (and the `.zh` lines if you can).
+Effects in the market are MIT licensed.
+
+The file name is the effect's name in the market, and it's yours from the first submission:
+submit under the same name again to update it. A name that someone else's effect has, or
+code that's already in the market (other comments or numbers don't make it new), fails the
+checks.
