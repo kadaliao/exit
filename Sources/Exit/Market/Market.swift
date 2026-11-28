@@ -12,6 +12,8 @@ struct MarketEntry: Codable, Hashable {
     let description: String?
     let descriptionZh: String?
     let author: String?
+    /// The GitHub account id that may update it (whoever first submitted it), when the market says.
+    let ownerId: Int?
     let events: [String]?
     let duration: Double?
     let requires: String?

@@ -156,7 +156,7 @@ struct GitHubAPI {
     static let userAgent = "Exit/\(AppVersion.current ?? "dev") (macOS)"
     let token: String
 
-    struct User: Decodable { let login: String }
+    struct User: Decodable { let login: String; let id: Int }
     struct Issue: Decodable {
         let number: Int
         let htmlUrl: String

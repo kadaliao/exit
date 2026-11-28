@@ -6,6 +6,7 @@ import SwiftUI
 struct SubmitSheet: View {
     @ObservedObject var effect: Effect
     @ObservedObject private var center = SubmissionCenter.shared
+    @ObservedObject private var market = MarketStore.shared
     @Environment(\.dismiss) private var dismiss
 
     @State private var draft: MarketSubmit.Draft?
@@ -23,10 +24,17 @@ struct SubmitSheet: View {
     private var idProblem: String? { MarketSubmit.idProblem(marketID) }
     /// An effect with this id is already in the market (from someone, maybe you).
     private var replaces: MarketItem? {
-        MarketStore.shared.items.first { $0.source.isOfficial && $0.entry.id == marketID }
+        market.items.first { $0.source.isOfficial && $0.entry.id == marketID }
+    }
+    /// Whether that effect belongs to the signed-in account: a name in the market belongs to
+    /// whoever first submitted it. Nil when the market doesn't say whose it is.
+    private var replacesOwn: Bool? {
+        guard let owner = replaces?.entry.ownerId, let me = center.account?.id else { return nil }
+        return owner == me
     }
     private var canSubmit: Bool {
-        draft != nil && !checking && problems.isEmpty && idProblem == nil && agreed && center.account != nil && !sending
+        draft != nil && !checking && problems.isEmpty && idProblem == nil && replacesOwn != false && agreed
+            && center.account != nil && !sending
     }
 
     var body: some View {
@@ -59,6 +67,7 @@ struct SubmitSheet: View {
         .frame(width: 600, height: 540)
         .task { await load() }
         .task { await center.refreshAccount() }
+        .task { market.refreshIfStale() }   // whose the market id is
     }
 
     // MARK: Parts
@@ -126,9 +135,16 @@ struct SubmitSheet: View {
                 Text(T("Market ID", "市场 ID")).gridColumnAlignment(.trailing)
                 VStack(alignment: .leading, spacing: 3) {
                     TextField("paper-plane", text: $marketID).textFieldStyle(.roundedBorder).font(.body.monospaced())
-                    if let replaces {
-                        Text(T("The market already has “\(replaces.entry.displayName)” under this id. Submitting replaces it, so only use it for your own effect.",
-                               "市场里已经有一个叫这个 ID 的特效「\(replaces.entry.displayName)」。投稿会替换它，只有它是你的作品时才这样做。"))
+                    if let replaces, replacesOwn == true {
+                        Text(T("Updates your “\(replaces.entry.displayName)” in the market.", "会更新你在市场里的「\(replaces.entry.displayName)」。"))
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else if let replaces, replacesOwn == false {
+                        Text(T("This id is “\(replaces.entry.displayName)”\(replaces.entry.author.map { " by \($0)" } ?? "") in the market. Give your effect another id.",
+                               "这个 ID 是市场里\(replaces.entry.author.map { " \($0) 的" } ?? "的")「\(replaces.entry.displayName)」。给你的特效换一个 ID。"))
+                            .font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+                    } else if let replaces {
+                        Text(T("The market already has “\(replaces.entry.displayName)” under this id. Only the person who submitted it can update it.",
+                               "市场里已经有一个叫这个 ID 的特效「\(replaces.entry.displayName)」。只有当初投稿它的人才能更新它。"))
                             .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
                     } else {
                         Text(T("The file name in the market: lowercase letters, digits and dashes.", "在市场里的文件名：小写字母、数字和短横线。"))

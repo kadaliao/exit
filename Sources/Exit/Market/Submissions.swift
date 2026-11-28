@@ -9,6 +9,7 @@ final class SubmissionCenter: ObservableObject {
 
     struct Account: Equatable {
         let login: String
+        let id: Int
         let source: GitHubAuth.Source
     }
 
@@ -98,8 +99,8 @@ final class SubmissionCenter: ObservableObject {
                 return
             }
             do {
-                let login = try await GitHubAPI(token: credential.token).user().login
-                account = Account(login: login, source: credential.source)
+                let user = try await GitHubAPI(token: credential.token).user()
+                account = Account(login: user.login, id: user.id, source: credential.source)
                 return
             } catch GitHubError.http(401, _) where credential.source == .exit {
                 // Revoked on GitHub: forget it and see whether the GitHub CLI can step in.
